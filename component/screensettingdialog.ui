@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ScreenSettingDialog</class>
+ <widget class="QDialog" name="ScreenSettingDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>500</width>
+    <height>388</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Dialog</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog{
+	background-color:#1D1F26
+}
+QLabel{
+	color:white;
+	font-size:14px;
+	min-width:60px;
+	max-width:60px;
+}
+QComboBox {
+    background-color: #3C404D;
+    border: 1px solid #3C3C3C;
+    border-radius: 5px;
+    padding: 4px 8px;
+    color: white;
+    font-size: 13px;
+	min-height:25px;
+	max-height:25px;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: 1px solid #3C3C3C;
+    background-color: #3C404D;
+}
+
+QComboBox::down-arrow {
+    image: url(:/sources/down.png);  /* 你可以用自己的箭头图标 */
+	background-color: #3C404D;
+    width: 12px;
+    height: 12px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #3C404D;
+    border: 1px solid #3C3C3C;
+    selection-background-color: #284CB8;
+    selection-color: white;
+    color: white;
+    font-size: 13px;
+    outline: 0;
+}
+
+QPushButton {
+        background-color: #3C404D;
+        border: none;
+         border-radius: 4px;
+         padding: 6px 12px;
+         color: white;
+		min-width:50px;
+		max-width:50px;
+		min-height:25px;
+		max-height:25px;
+
+}
+QPushButton:hover { background-color: #3c3d47; }
+QPushButton:pressed { background-color: #50515b; }</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QLabel" name="label">
+       <property name="styleSheet">
+        <string notr="true"/>
+       </property>
+       <property name="text">
+        <string>采集方式</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="captureTypeCBBox">
+       <item>
+        <property name="text">
+         <string>DXGI</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>gdigrab</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <item>
+      <widget class="QLabel" name="label_2">
+       <property name="text">
+        <string>显示器</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="screenCBBox">
+       <property name="placeholderText">
+        <string/>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="drawMouseCKBox">
+     <property name="styleSheet">
+      <string notr="true">QCheckBox{
+    color: white;
+	font-size:14px;
+	margin-left:10px;
+	spacing: 10px;
+	margin-left: 64px;
+}
+QCheckBox::indicator {
+    width: 20px;    /* 设置勾选框的宽度 */
+    height: 20px;   /* 设置勾选框的高度 */
+}</string>
+     </property>
+     <property name="text">
+      <string>绘制鼠标</string>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Orientation::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>238</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="styleSheet">
+      <string notr="true"/>
+     </property>
+     <property name="orientation">
+      <enum>Qt::Orientation::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>accepted()</signal>
+   <receiver>ScreenSettingDialog</receiver>
+   <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>248</x>
+     <y>254</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>157</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>ScreenSettingDialog</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>316</x>
+     <y>260</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>286</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

@@ -1,0 +1,388 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AudioMixerDialog</class>
+ <widget class="QDialog" name="AudioMixerDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>780</width>
+    <height>306</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>780</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>780</width>
+    <height>16777215</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Dialog</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QDialog{
+	background-color:#1D1F26
+}
+
+
+QLabel{
+	color:white;
+	font-size:14px;
+	min-width:100px;
+	max-width:100px;
+}
+
+QLineEdit{
+	 background-color: #3C404D;
+    border: 1px solid #3C3C3C;
+    border-radius: 5px;
+    padding: 4px 8px;
+    color: white;
+    font-size: 13px;
+	min-height:25px;
+	max-height:25px;
+
+}
+QComboBox {
+    background-color: #3C404D;
+    border: 1px solid #3C3C3C;
+    border-radius: 5px;
+    padding: 4px 8px;
+    color: white;
+    font-size: 13px;
+	min-height:25px;
+	max-height:25px;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: 1px solid #3C3C3C;
+    background-color: #3C404D;
+}
+
+QComboBox::down-arrow {
+    image: url(:/sources/down.png);  /* 你可以用自己的箭头图标 */
+	background-color: #3C404D;
+    width: 12px;
+    height: 12px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #3C404D;
+    border: 1px solid #3C3C3C;
+    selection-background-color: #284CB8;
+    selection-color: white;
+    color: white;
+    font-size: 13px;
+    outline: 0;
+}
+
+QPushButton {
+        background-color: #3C404D;
+        border: none;
+         border-radius: 4px;
+         padding: 6px 12px;
+         color: white;
+		min-width:50px;
+		max-width:50px;
+		min-height:25px;
+		max-height:25px;
+
+}
+QPushButton:hover { background-color: #3c3d47; }
+QPushButton:pressed { background-color: #50515b; }
+
+
+QSpinBox {
+    background-color: #3C404D;
+    border: 1px solid #3C3C3C;
+    border-radius: 5px;
+    padding: 4px 8px;
+    color: white;
+    font-size: 13px;
+    min-height: 25px;
+    max-height: 25px;
+}
+
+/* 去除边框阴影等默认效果 */
+QSpinBox:focus {
+    border: 1px solid #284CB8;
+}
+
+/* 上下按钮区域 */
+QSpinBox::up-button, QSpinBox::down-button {
+    background-color: #3C404D;
+    subcontrol-origin: border;
+    width: 20px;
+    border-left: 1px solid #3C3C3C;
+}
+
+/* 上按钮图标 */
+QSpinBox::up-arrow {
+    image: url(:/sources/up.png); /* 使用你自己的图标 */
+    width: 12px;
+    height: 12px;
+}
+
+/* 下按钮图标 */
+QSpinBox::down-arrow {
+    image: url(:/sources/down.png); /* 使用你自己的图标 */
+    width: 12px;
+    height: 12px;
+}
+
+/* 关闭上下按钮按下时的高亮 */
+QSpinBox::up-button:pressed,
+QSpinBox::down-button:pressed {
+    background-color: #50555E;
+}
+
+/* 去除输入焦点边框 */
+QSpinBox::edit-field {
+    background: transparent;
+    padding-right: 24px; /* 给按钮留空间 */
+}
+
+
+
+
+QDoubleSpinBox {
+    background-color: #3C404D;
+    border: 1px solid #3C3C3C;
+    border-radius: 5px;
+    padding: 4px 8px;
+    color: white;
+    font-size: 13px;
+    min-height: 25px;
+    max-height: 25px;
+}
+
+/* 去除边框阴影等默认效果 */
+QDoubleSpinBox:focus {
+    border: 1px solid #284CB8;
+}
+
+/* 上下按钮区域 */
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+    background-color: #3C404D;
+    subcontrol-origin: border;
+    width: 20px;
+    border-left: 1px solid #3C3C3C;
+}
+
+/* 上按钮图标 */
+QDoubleSpinBox::up-arrow {
+    image: url(:/sources/up.png); /* 使用你自己的图标 */
+    width: 12px;
+    height: 12px;
+}
+
+/* 下按钮图标 */
+QDoubleSpinBox::down-arrow {
+    image: url(:/sources/down.png); /* 使用你自己的图标 */
+    width: 12px;
+    height: 12px;
+}
+
+/* 关闭上下按钮按下时的高亮 */
+QDoubleSpinBox::up-button:pressed,
+QDoubleSpinBox::down-button:pressed {
+    background-color: #50555E;
+}
+
+/* 去除输入焦点边框 */
+QDoubleSpinBox::edit-field {
+    background: transparent;
+    padding-right: 24px; /* 给按钮留空间 */
+}</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <property name="leftMargin">
+    <number>15</number>
+   </property>
+   <property name="topMargin">
+    <number>15</number>
+   </property>
+   <property name="rightMargin">
+    <number>15</number>
+   </property>
+   <property name="bottomMargin">
+    <number>15</number>
+   </property>
+   <item row="1" column="0">
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Orientation::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="QWidget" name="containerWidget" native="true">
+     <property name="styleSheet">
+      <string notr="true">QWidget{
+	background-color:#272A33;
+	border-radius:8px;
+}</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_2">
+      <item row="0" column="0">
+       <widget class="QTableWidget" name="tableWidget">
+        <property name="styleSheet">
+         <string notr="true">/* 去除表格所有边框样式 */
+QTableWidget {
+    border: none;               /* 去除表格最外层边框 */
+    background-color: #272A33;  /* 背景色（可根据需要调整） */
+    color: #ffffff;             /* 文字颜色 */
+    gridline-color: transparent;/* 网格线透明 */
+}
+
+QTableWidget::item {
+    border: none;               /* 去除单元格边框 */
+    padding: 4px 8px;           /* 单元格内边距 */
+	text-align: left; /* 水平靠左 */
+    vertical-align: middle; /* 垂直居中 */
+}
+
+/* 表头样式 */
+QHeaderView::section {
+    border: none;               /* 去除表头边框 */
+    background-color: #272A33;  /* 表头背景色 */
+    color: #ffffff;             /* 表头文字颜色 */
+    padding: 6px 8px;           /* 表头内边距 */
+	text-align:left;
+    vertical-align: middle; /* 垂直居中 */
+}
+
+/* 滚动区域边框去除 */
+QTableWidget QScrollArea {
+    border: none;
+}
+
+/* 滚动条样式（可选） */
+QTableWidget QScrollBar:vertical {
+    background-color: #272822;
+    width: 8px;
+    margin: 0px;
+}
+
+QTableWidget QScrollBar::handle:vertical {
+    background-color: #555555;
+    border-radius: 4px;
+}
+
+QTableWidget QScrollBar:horizontal {
+    background-color: #272822;
+    height: 8px;
+    margin: 0px;
+}
+
+QTableWidget QScrollBar::handle:horizontal {
+    background-color: #555555;
+    border-radius: 4px;
+}
+
+</string>
+        </property>
+        <property name="defaultDropAction">
+         <enum>Qt::DropAction::IgnoreAction</enum>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::SelectionMode::NoSelection</enum>
+        </property>
+        <property name="showGrid">
+         <bool>false</bool>
+        </property>
+        <property name="gridStyle">
+         <enum>Qt::PenStyle::NoPen</enum>
+        </property>
+        <attribute name="horizontalHeaderVisible">
+         <bool>true</bool>
+        </attribute>
+        <attribute name="horizontalHeaderHighlightSections">
+         <bool>false</bool>
+        </attribute>
+        <attribute name="verticalHeaderVisible">
+         <bool>false</bool>
+        </attribute>
+        <attribute name="verticalHeaderHighlightSections">
+         <bool>false</bool>
+        </attribute>
+        <column>
+         <property name="text">
+          <string>名称</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>状态</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>音量</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>同步偏移</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>音频监听</string>
+         </property>
+        </column>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>accepted()</signal>
+   <receiver>AudioMixerDialog</receiver>
+   <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>248</x>
+     <y>254</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>157</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>AudioMixerDialog</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>316</x>
+     <y>260</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>286</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>
