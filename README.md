@@ -9,6 +9,7 @@
 - 网络实时监测系统 ：支持UDP/TCP/ZLMediakit三种监测模式，可实时监测网络延迟、丢包率、端口状态和推流带宽等关键指标
 - 动态码率自适应 ：基于网络状态和编码器队列状态，实现智能码率调整
 
+主界面展示：
 
 功能演示视频：https://www.bilibili.com/video/BV1SKnBzsEAK/?spm_id_from=333.1387.homepage.video_card.click&vd_source=17543aeb4799871afe71a43670293ba7
 
