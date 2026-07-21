@@ -430,6 +430,7 @@ void CudaRenderWidget::offscreenRender()
     } else {
         glFinish();
     }
+
     if (!visibleLayerTs.empty()) {
         int64_t maxLayerTs = *std::max_element(visibleLayerTs.begin(), visibleLayerTs.end());
         syncClock_->calibrateVideo(maxLayerTs);
@@ -614,7 +615,7 @@ void CudaRenderWidget::renderLayersToWindow()
     }
 }
 
-// 新增：仅在非录制状态绘制边框
+// 仅在非录制状态绘制边框
 void CudaRenderWidget::renderBorders()
 {
 

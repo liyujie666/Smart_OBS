@@ -35,7 +35,9 @@ bool MuxerManager::addOutput(MuxerType type, const QString& url,const QString& f
             delete muxer;
             return false;
         }
-
+        if(type == MuxerType::Push){
+            muxer->startNetworkMonitor();
+        }
         muxers_.append({type, url, muxer});
     }
 
@@ -51,6 +53,7 @@ void MuxerManager::removeOutput(MuxerType type)
         if (muxers_[i].type == type) {
             // 释放资源
             muxers_[i].muxer->writeTrailer();
+            muxers_[i].muxer->stopNetworkMonitor();
             delete muxers_[i].muxer;
             // 从向量中删除
             muxers_.remove(i);

@@ -226,13 +226,13 @@ bool VEncoder::encode(cudaArray_t cuda_array)
     cuda_err = cudaGetLastError();
     if (cuda_err != cudaSuccess) {
         qDebug() << "RGBAToNV12 conversion failed:" << cudaGetErrorString(cuda_err);
-        cudaFree(d_rgba_temp);  // 错误路径释放
+        cudaFree(d_rgba_temp);
         return false;
     }
 
     // 释放临时RGBA内存（正常流程）
     cudaFree(d_rgba_temp);
-    d_rgba_temp = nullptr;  // 避免野指针
+    d_rgba_temp = nullptr;
 
     // 拷贝Y平面到AVFrame
     cuda_err = cudaMemcpy(frame_->data[0], reinterpret_cast<void*>(d_y_plane_), y_size_, cudaMemcpyDeviceToHost);
@@ -335,7 +335,7 @@ void VEncoder::close()
 
     // 释放FFmpeg资源
     GlobalPool::getFramePool().recycle(frame_);
-    avcodec_flush_buffers(codecCtx_);
+    //avcodec_flush_buffers(codecCtx_);
     avcodec_free_context(&codecCtx_);
     codec_ = nullptr;
     codecCtx_ = nullptr;

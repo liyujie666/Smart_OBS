@@ -382,7 +382,7 @@ void StreamController::videoEncodeLoop() {
 
         auto endTime = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-        qDebug() << "单帧编码时长" << duration.count() << "ms";
+        //qDebug() << "单帧编码时长" << duration.count() << "ms";
         cudaHelper->unmapFboCudaArray();
         threadGLContext->doneCurrent();
 

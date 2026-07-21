@@ -6,21 +6,21 @@
 class GlobalPool {
 public:
     static PacketPool& getPacketPool() {
-        static PacketPool pool(128);
+        static PacketPool pool(216);
         return pool;
     }
 
     static FramePool& getFramePool() {
-        static FramePool pool(128);
+        static FramePool pool(16);
         return pool;
     }
 
     static void setFramePoolMaxSize(size_t newMaxSize) {
-        return getFramePool().setMaxSize(newMaxSize);
+        getFramePool().setMaxSize(newMaxSize);
     }
 
     static void setPacketPoolMaxSize(size_t newMaxSize) {
-        return getPacketPool().setMaxSize(newMaxSize);
+        getPacketPool().setMaxSize(newMaxSize);
     }
 
     static size_t getFramePoolMaxSize() {

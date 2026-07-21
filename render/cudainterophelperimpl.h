@@ -73,12 +73,12 @@ public:
     }
 
 
-    // 新增：等待所有 CUDA 操作完成
+    // 等待所有 CUDA 操作完成
     void waitForOperationsToComplete() {
         cudaEventSynchronize(releaseEvent);
     }
 
-    // 新增：标记当前 CUDA 操作完成
+    // 标记当前 CUDA 操作完成
     void markOperationComplete() {
         cudaEventRecord(releaseEvent, 0);
     }

@@ -21,6 +21,7 @@
 #include "pool/gloabalpool.h"
 #include "sync/offsetmanager.h"
 #include "transition/transitionmanager.h"
+#include "monitor/netmonitor.h"
 #include "ffmpegutils.h"
 #include <QScrollArea>
 #include <QApplication>
@@ -49,10 +50,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_trayIcon.show();
     connect(ui->openGLWidget,&CudaRenderWidget::layerClicked,this,&MainWindow::onLayerClicked);
     connect(m_tcpMonitor, &NetworkMonitor::serverClosed,this,&MainWindow::on_StreamPushingClosed);
-    // QTimer *poolTimer = new QTimer(this);
-    // poolTimer->setInterval(2000);
-    // connect(poolTimer,&QTimer::timeout,this,&MainWindow::printPoolStats);
-    // poolTimer->start();
+    QTimer *poolTimer = new QTimer(this);
+    poolTimer->setInterval(2000);
+    connect(poolTimer,&QTimer::timeout,this,&MainWindow::printPoolStats);
+    poolTimer->start();
 
 }
 
@@ -247,22 +248,23 @@ void MainWindow::initMixer()
     mixLayout->addWidget(m_mixerContainer);
     int sceneId = m_sceneManager->currentScene()->id();
     int microId = m_audioSourceManager->allocteSourceId();
-    // AudioDeviceParams microParams;
-    // microParams.deviceName = "麦克风 (1080P USB Camera-Audio)";
-    // microParams.nickName = "麦克风";
-    // microParams.channels = 2;
-    // microParams.sampleRate = 48000;
-    // AudioSource* microSource = new MicrophoneAudioSource(microId,sceneId,microParams,this);
-    // AudioItemWidget* microWidget = nullptr;
-    // if(microSource->open() == 0)
-    // {
-    //     qDebug() << "麦克风打开成功！";
-    //     m_audioSourceManager->addGlobalSource(microSource);
-    //     microWidget = new AudioItemWidget(microSource,this);
-    //     m_mixerContainer->addWidget(microWidget);
-    //     startAudioThread(microSource,microWidget);
-    //     qDebug() << "麦克风打开失败！";
-    // }
+    AudioDeviceParams microParams;
+    microParams.deviceName = "麦克风 (1080P USB Camera-Audio)";
+    microParams.nickName = "麦克风";
+    microParams.channels = 2;
+    microParams.sampleRate = 48000;
+    AudioSource* microSource = new MicrophoneAudioSource(microId,sceneId,microParams,this);
+    AudioItemWidget* microWidget = nullptr;
+    if(microSource->open() == 0)
+    {
+        qDebug() << "麦克风打开成功！";
+        m_audioSourceManager->addGlobalSource(microSource);
+        microWidget = new AudioItemWidget(microSource,this);
+        m_mixerContainer->addWidget(microWidget);
+        startAudioThread(microSource,microWidget);
+    }else{
+        qDebug() << "麦克风打开失败！";
+    }
 
     int desktopId = m_audioSourceManager->allocteSourceId();
     AudioDeviceParams desktopParams;
@@ -295,7 +297,7 @@ void MainWindow::initMixer()
     desktopConfig.nickName = "桌面音频";
     desktopConfig.iconUrl = ":/sources/screen.png";
 
-    //AudioMixerDialog::getInstance()->addAudioItem(microId,microConfig,microWidget);
+    AudioMixerDialog::getInstance()->addAudioItem(microId,microConfig,microWidget);
     AudioMixerDialog::getInstance()->addAudioItem(desktopId,desktopConfig,desktopWidget);
 
 
@@ -1561,6 +1563,10 @@ void MainWindow::printPoolStats()
     qDebug() << "===== PacketPool Stats =====";
     GlobalPool::getPacketPool().printStats();  // 调用全局PacketPool的打印方法
     qDebug() << "---------------------------\n";
+    // NetworkStats stats = NetMonitor::instance()->getCurrentStats();
+    // qDebug() << "上行带宽:" << stats.upload_bps / 1000 << "kbps";
+    // qDebug() << "丢包率:" << stats.packet_loss_rate << "%";
+    // qDebug() << "网络等级:" << stats.level;
 }
 
 

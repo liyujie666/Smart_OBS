@@ -1,154 +1,3 @@
-// #include "scenemanager.h"
-// #include "scene/scene.h"
-// #include "transition/transitionmanager.h"
-// #include <QDebug>
-// SceneManager::SceneManager(QObject* parent)
-//     : QObject(parent), m_currentScene(nullptr)
-// {
-// }
-
-// SceneManager::~SceneManager()
-// {
-//     release();
-// }
-
-// void SceneManager::addScene(Scene *scene)
-// {
-//     if(!scene) return;
-//     std::lock_guard<std::mutex> locker(m_mutex);
-//     m_scenes.push_back(scene);
-// }
-
-// void SceneManager::removeSceneById(int sceneId)
-// {
-//     std::lock_guard<std::mutex> locker(m_mutex);
-//     for (auto it = m_scenes.begin(); it != m_scenes.end(); ++it)
-//     {
-//         if (*it && (*it)->id() == sceneId)
-//         {
-//             delete *it;
-//             m_scenes.erase(it);
-//             break;
-//         }
-//     }
-// }
-
-// Scene *SceneManager::findSceneById(int sceneId)
-// {
-//     for(const auto& scene : m_scenes)
-//     {
-//         if(scene->id() == sceneId)
-//         {
-//             return scene;
-//         }
-//     }
-
-//     return nullptr;
-// }
-
-// // void SceneManager::switchScene(int sceneId)
-// // {
-// //     std::lock_guard<std::mutex> locker(m_mutex);
-
-// //     auto newScene = findSceneById(sceneId);
-// //     if(!newScene) return;
-
-// //     // // 停止源渲染
-// //     Scene* oldScene = m_currentScene;
-// //     emit sceneSwitchBefore(oldScene,newScene);
-
-// //     m_currentScene = newScene;
-// //     emit sceneIdUpdate(sceneId);
-// //     // 新场景渲染
-// //     emit sceneSwitched(newScene);
-
-// // }
-
-// void SceneManager::switchScene(int sceneId)
-// {
-//     std::lock_guard<std::mutex> locker(m_mutex);
-//     auto newScene = findSceneById(sceneId);
-//     if (!newScene || newScene == m_currentScene) return;
-
-//     // 1. 获取转场管理器实例
-//     TransitionManager* transitionMgr = TransitionManager::getInstance();
-//     if (transitionMgr->isTransitioning()) {
-//         transitionMgr->stop();  // 中断当前转场（如果有）
-//     }
-
-//     Scene* oldScene = m_currentScene;
-//     if (!oldScene) {
-//         // 无旧场景，直接切换（不触发转场）
-//         m_currentScene = newScene;
-//         emit sceneIdUpdate(sceneId);
-//         emit sceneSwitched(newScene);
-//         return;
-//     }
-
-//     // 3. 连接转场结束信号：转场结束后更新当前场景，清理旧场景
-//     connect(transitionMgr, &TransitionManager::transitionFinished, this, [=]() {
-//         std::lock_guard<std::mutex> locker(m_mutex);
-//         m_currentScene = newScene;
-//         emit sceneIdUpdate(sceneId);
-//         emit sceneSwitchBefore(oldScene,newScene);
-//         emit sceneSwitched(newScene);
-//         disconnect(transitionMgr, &TransitionManager::transitionFinished, this, nullptr);
-//     });
-
-//     // 4. 开始转场
-//     transitionMgr->start(oldScene, newScene);
-// }
-
-// Scene *SceneManager::currentScene()
-// {
-//     return m_currentScene;
-// }
-
-// std::vector<Scene *> SceneManager::getAllScenes()
-// {
-//     return m_scenes;
-// }
-
-// void SceneManager::moveSceneUp(int sceneId)
-// {
-//     std::lock_guard<std::mutex> locker(m_mutex);
-//     auto scene = findSceneById(sceneId);
-//     if(scene)
-//     {
-//         scene->setPriority(scene->priority() - 1);
-//     }
-
-// }
-
-// void SceneManager::moveSceneDown(int sceneId)
-// {
-//     std::lock_guard<std::mutex> locker(m_mutex);
-//     auto scene = findSceneById(sceneId);
-//     if(scene)
-//     {
-//         scene->setPriority(scene->priority() + 1);
-//     }
-// }
-
-// void SceneManager::release()
-// {
-//     std::lock_guard<std::mutex> locker(m_mutex);
-//     for (auto& scene : m_scenes) {
-//         if (scene) {
-//             delete scene;
-//         }
-//     }
-//     m_scenes.clear();
-//     m_currentScene = nullptr;
-// }
-
-
-// void SceneManager::sortScenesByPriority()
-// {
-//     std::sort(m_scenes.begin(),m_scenes.end(),[](const Scene* a,const Scene* b){
-//         return a->priority() < b->priority();
-//     });
-// }
 #include "scenemanager.h"
 #include "scene/scene.h"
 #include "transition/transitionmanager.h"
@@ -232,15 +81,15 @@ void SceneManager::switchScene(int sceneId)
         disconnect(transitionMgr, &TransitionManager::transitionFinished, this, nullptr);
     });
 
-    // 开始转场（传递shared_ptr的拷贝）
+    // 开始转场
     transitionMgr->start(oldScene, newScene);
 }
 
-// 获取当前场景（返回shared_ptr，确保访问时对象有效）
+// 获取当前场景
 std::shared_ptr<Scene> SceneManager::currentScene()
 {
     std::lock_guard<std::mutex> locker(m_mutex);
-    return m_currentScene.lock();  // 若对象已销毁，返回nullptr
+    return m_currentScene.lock();
 }
 
 // 获取所有场景

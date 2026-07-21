@@ -37,6 +37,7 @@ SOURCES += \
     mixer/audiomixer.cpp \
     mixer/audiomixprocessor.cpp \
     monitor/audiomonitor.cpp \
+    monitor/netmonitor.cpp \
     monitor/networkmonitor.cpp \
     monitor/systemmonitor.cpp \
     muxer/muxer.cpp \
@@ -114,6 +115,7 @@ HEADERS += \
     mixer/audiomixer.h \
     mixer/audiomixprocessor.h \
     monitor/audiomonitor.h \
+    monitor/netmonitor.h \
     monitor/networkmonitor.h \
     monitor/systemmonitor.h \
     muxer/muxer.h \

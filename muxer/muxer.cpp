@@ -1,8 +1,10 @@
 #include "muxer.h"
 #include "statusbar/statusbarmanager.h"
+#include "monitor/netmonitor.h"
 #include <QDebug>
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 Muxer::Muxer()
 {}
 
@@ -42,6 +44,30 @@ bool Muxer::init(const QString& url,MuxerType type,const QString& format)
         return false;
     }
 
+    // 自定义AVIO回调
+    if (target.type_ == MuxerType::Push) {
+        // 1. 分配AVIO缓冲区
+        target.avioBuffer = (uint8_t*)av_malloc(target.avioBufferSize);
+        if (!target.avioBuffer) {
+            avformat_free_context(target.fmtCtx);
+            return false;
+        }
+
+        // 2. 创建自定义AVIO上下文（绑定自定义回调）
+        target.customAvioCtx = avio_alloc_context(
+            target.avioBuffer,          // 缓冲区
+            target.avioBufferSize,      // 大小1M
+            1,                          // 只写模式
+            &target,                    // 透传自身对象
+            nullptr,                    // 不读
+            customWriteCallback,        // ✅ 修正后的写回调
+            nullptr                     // 不seek
+            );
+
+        // 3. 替换FFmpeg默认IO为自定义IO
+        target.fmtCtx->pb = target.customAvioCtx;
+    }
+
     if (!(target.fmtCtx->oformat->flags & AVFMT_NOFILE)) {
         ret = avio_open(&target.fmtCtx->pb, target.url.toUtf8().constData(), AVIO_FLAG_WRITE);
         if (ret < 0) {
@@ -50,6 +76,12 @@ bool Muxer::init(const QString& url,MuxerType type,const QString& format)
                 StatusBarManager::getInstance().showMessage("文件路径 " + target.url + " 错误！",MessageType::Warning);
             }else{
                 StatusBarManager::getInstance().showMessage("服务器 " + target.url + " 未启动！",MessageType::Warning);
+            }
+
+            // 释放自定义AVIO
+            if (target.customAvioCtx) {
+                av_freep(&target.customAvioCtx->buffer);
+                avio_context_free(&target.customAvioCtx);
             }
             avformat_free_context(target.fmtCtx);
             return false;
@@ -61,6 +93,7 @@ bool Muxer::init(const QString& url,MuxerType type,const QString& format)
     targets_.push_back(std::move(target));
     initialized_ = true;
     qDebug() << "Muxer init sucessfully!";
+
     return true;
 }
 
@@ -180,6 +213,7 @@ bool Muxer::writePacket(AVPacket* pkt, AVMediaType type)
 
 void Muxer::writeTrailer()
 {
+
     for (auto& target : targets_) {
         if (target.fmtCtx) {
             if (target.headerWritten) {
@@ -203,6 +237,14 @@ void Muxer::writeTrailer()
                 target.headerWritten = false;
             }
 
+            // ====================== 释放自定义AVIO ======================
+            if (target.customAvioCtx) {
+                av_freep(&target.customAvioCtx->buffer);
+                avio_context_free(&target.customAvioCtx);
+                target.customAvioCtx = nullptr;
+            }
+            // ============================================================
+
             // 无论写入尾是否成功，都必须关闭文件句柄
             if (!(target.fmtCtx->oformat->flags & AVFMT_NOFILE) && target.fmtCtx->pb) {
                 avio_closep(&target.fmtCtx->pb);  // 关闭IO
@@ -219,6 +261,29 @@ void Muxer::writeTrailer()
 void Muxer::close()
 {
     writeTrailer();
+}
+
+int Muxer::customWriteCallback(void* opaque, const uint8_t* buf, int buf_size)
+{
+    // 1. 取回你传入的 OutputTarget 对象
+    OutputTarget* target = (OutputTarget*)opaque;
+
+    // ===================== 网络监测核心 =====================
+    if (target->type_ == MuxerType::Push) {
+        // 统计发送字节 → 计算上行带宽
+        qDebug() << "buf_size" << buf_size;
+        NetMonitor::instance()->addSendBytes(buf_size);
+
+        // 弱网/丢包模拟：返回-1代表写入失败
+        // if (网络阻塞) {
+        //     NetMonitor::instance()->addSendFailed();
+        //     return -1;
+        // }
+    }
+    // ======================================================
+
+    // 返回写入的字节数（固定返回buf_size，代表发送成功）
+    return buf_size;
 }
 
 void Muxer::correctPtsDts(AVPacket* pkt, AVStream* stream, AVRational srcTimebase, int64_t& startPts)
@@ -247,4 +312,55 @@ void Muxer::correctPtsDts(AVPacket* pkt, AVStream* stream, AVRational srcTimebas
     // qDebug() << (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO ? "视频" : "音频")
     //          << "原始pts:" << pkt->pts << "相对pts:" << relativePts
     //          << "转换后pts:" << pkt->pts << "目标时间基:" << stream->time_base.num << "/" << stream->time_base.den;
+}
+
+
+// 1. 启动监测（推流成功后调用）
+void Muxer::startNetworkMonitor()
+{
+    if(!m_networkTimer){
+        m_networkTimer = new QTimer(this);
+        m_networkTimer->setInterval(1000); // 1秒测一次
+        connect(m_networkTimer, &QTimer::timeout, this, &Muxer::onNetworkStatsTimer);
+    }
+    m_networkTimer->start();
+    qDebug() << "网络监测启动";
+}
+
+// 2. 停止监测（停止推流时调用）
+void Muxer::stopNetworkMonitor()
+{
+    if(m_networkTimer){
+        m_networkTimer->stop();
+        qDebug() << "网络监测关闭";
+    }
+}
+
+// 3. ✅ 核心定时器：每秒执行【RTT监测 + 缓冲区监测】
+void Muxer::onNetworkStatsTimer()
+{
+    for (auto& target : targets_) {
+        if (target.type_ != MuxerType::Push) {
+            continue;
+        }
+
+        // 1. RTMP Ping 测延迟（上面的代码）
+        QElapsedTimer pingTimer;
+        pingTimer.start();
+        av_write_frame(target.fmtCtx, nullptr);
+        int rtt_ms = pingTimer.elapsed();
+        NetMonitor::instance()->updateRTT(rtt_ms);
+
+        // ====================== 2. 读取 FFmpeg 发送缓冲区 ======================
+        if (target.customAvioCtx) {
+            AVIOContext* avio = target.customAvioCtx;
+
+            // 计算：缓冲区中**待发送的堆积数据**（单位：字节）
+            qint64 buffer_bytes = avio->buf_end - avio->buf_ptr;
+
+            // 传给监测类 → 自动计算【缓冲时长】（卡顿核心指标）
+            NetMonitor::instance()->updateBufferSize(buffer_bytes);
+        }
+        // ====================================================================
+    }
 }

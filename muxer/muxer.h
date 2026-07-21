@@ -5,7 +5,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 }
-
+#include <QTimer>
 #include <QString>
 #include <vector>
 
@@ -13,8 +13,9 @@ enum class MuxerType {
     Record,
     Push
 };
-class Muxer
+class Muxer : public QObject
 {
+    Q_OBJECT
 public:
     Muxer();
     ~Muxer();
@@ -37,6 +38,12 @@ public:
     // 关闭并释放资源
     void close();
 
+    void startNetworkMonitor();
+    void stopNetworkMonitor();
+private slots:
+
+    void onNetworkStatsTimer();
+
 private:
     struct OutputTarget {
         QString url;
@@ -50,11 +57,19 @@ private:
         int64_t startPtsVideo = AV_NOPTS_VALUE;
         bool headerWritten = false;
         MuxerType type_;
+
+        // 自定义AVIO（用于推流网络监测）
+        AVIOContext* customAvioCtx = nullptr;
+        uint8_t* avioBuffer = nullptr;
+        const int avioBufferSize = 1024 * 1024; // 1M缓冲区
     };
 
     std::vector<OutputTarget> targets_;
     bool initialized_ = false;
 
+    QTimer* m_networkTimer = nullptr;
+
+    static int customWriteCallback(void* opaque, const uint8_t* buf, int buf_size);
     void correctPtsDts(AVPacket* pkt, AVStream* stream, AVRational srcTimebase, int64_t& startPts);
 };
 
