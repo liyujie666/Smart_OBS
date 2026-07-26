@@ -11,7 +11,7 @@
 #include "scene/audiosourcemanager.h"
 #include "controller/mediasourcecontroller.h"
 #include "monitor/systemmonitor.h"
-#include "monitor/networkmonitor.h"
+#include "monitor/netmonitor.h"
 #include "thread/threadpool.h"
 #include "controlbar.h"
 #include <QMainWindow>
@@ -66,9 +66,7 @@ private slots:
     void on_sceneSwitched(std::shared_ptr<Scene> newScene);
 
     void on_statisticBtn_clicked();
-    void on_StreamPushingReconnected();
-    void on_StreamPushingDisconnected();
-    void on_StreamPushingClosed();
+    void onSessionStateChanged(rtmp::SessionState state, const QString& detail);
 private:
     // 初始化UI
     void initUI();
@@ -94,6 +92,7 @@ private:
     void debugStreamConfig(const StreamConfig& config);
     bool addAudioItemToMixerLayout(AudioItemWidget* audioItem);
     void showDisconnectNotify(QWidget *parent);
+    void showReconnectCountdown();
 private:
     Ui::MainWindow *ui;
     SceneManager* m_sceneManager = nullptr;
@@ -103,8 +102,7 @@ private:
     ControlBar* m_controlBar = nullptr;
     ScrollableContainer* m_mixerContainer = nullptr;
     SystemMonitor* m_sysMonitor = nullptr;
-    NetworkMonitor* m_networkMonitor = nullptr;
-    NetworkMonitor* m_tcpMonitor = nullptr;
+    NetMonitor* m_netMonitor = nullptr;
     QSystemTrayIcon m_trayIcon{this};
     ThreadPool* m_threadPool = nullptr;
     int m_nextSceneId = 1;
@@ -119,5 +117,10 @@ private:
 
     StreamConfig streamConfig_;
     bool isConfigInitialed = false;
+    bool m_streamHasConnected = false;
+    bool m_disconnectNotified = false;
+    QTimer* m_reconnectStatusTimer = nullptr;
+    int m_reconnectAttempt = 0;
+    int m_reconnectRemainingSeconds = 0;
 };
 #endif // MAINWINDOW_H

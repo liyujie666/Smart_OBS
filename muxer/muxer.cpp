@@ -1,366 +1,281 @@
 #include "muxer.h"
-#include "statusbar/statusbarmanager.h"
+
+#include "adapter_ffmpeg/ffmpeg_bridge.h"
 #include "monitor/netmonitor.h"
-#include <QDebug>
+#include "statusbar/statusbarmanager.h"
+
 #include <QDateTime>
+#include <QDebug>
 #include <QDir>
-#include <QElapsedTimer>
-Muxer::Muxer()
-{}
+
+Muxer::Muxer() = default;
 
 Muxer::~Muxer()
 {
     close();
 }
 
-bool Muxer::init(const QString& url,MuxerType type,const QString& format)
+bool Muxer::init(const QString& url, MuxerType type, const QString& format)
 {
-    qDebug() << "srcUrl" << url;
-    OutputTarget target;
-    const char* fmt_name = nullptr;
-    if(type == MuxerType::Record)
-    {
-        QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
-        QString suffix = QString("%1.%2").arg(timestamp).arg(format);
+    close();
+    url_ = url;
+    type_ = type;
+    format_ = format;
 
-        QString dirUrl = url;
-        if (!dirUrl.isEmpty() && !dirUrl.endsWith(QDir::separator())) {
-            dirUrl += QDir::separator(); // 自动添加斜杠（兼容Windows和Linux）
-        }
-
-        target.url = dirUrl + suffix; // 拼接路径
-        target.type_ = type;
+    if (type_ == MuxerType::Push) {
+        return initPublisher();
     }
-    else
-    {
-        target.url = url;
-        target.type_ = type;
-        fmt_name = "flv";
-    }
+    return initRecorder(format);
+}
 
-    int ret = avformat_alloc_output_context2(&target.fmtCtx, nullptr, fmt_name, target.url.toUtf8().constData());
-    if (ret < 0 || !target.fmtCtx) {
-        qDebug() << "Failed to allocate output context for:" << target.url;
+bool Muxer::initRecorder(const QString& format)
+{
+    QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
+    QString dirUrl = url_;
+    if (!dirUrl.isEmpty() && !dirUrl.endsWith(QDir::separator())) {
+        dirUrl += QDir::separator();
+    }
+    url_ = dirUrl + QString("%1.%2").arg(timestamp, format);
+
+    const QByteArray encodedUrl = url_.toUtf8();
+    int ret = avformat_alloc_output_context2(&fmtCtx_, nullptr, nullptr, encodedUrl.constData());
+    if (ret < 0 || !fmtCtx_) {
+        qWarning() << "Failed to allocate recording context for" << url_;
         return false;
     }
 
-    // 自定义AVIO回调
-    if (target.type_ == MuxerType::Push) {
-        // 1. 分配AVIO缓冲区
-        target.avioBuffer = (uint8_t*)av_malloc(target.avioBufferSize);
-        if (!target.avioBuffer) {
-            avformat_free_context(target.fmtCtx);
-            return false;
-        }
-
-        // 2. 创建自定义AVIO上下文（绑定自定义回调）
-        target.customAvioCtx = avio_alloc_context(
-            target.avioBuffer,          // 缓冲区
-            target.avioBufferSize,      // 大小1M
-            1,                          // 只写模式
-            &target,                    // 透传自身对象
-            nullptr,                    // 不读
-            customWriteCallback,        // ✅ 修正后的写回调
-            nullptr                     // 不seek
-            );
-
-        // 3. 替换FFmpeg默认IO为自定义IO
-        target.fmtCtx->pb = target.customAvioCtx;
-    }
-
-    if (!(target.fmtCtx->oformat->flags & AVFMT_NOFILE)) {
-        ret = avio_open(&target.fmtCtx->pb, target.url.toUtf8().constData(), AVIO_FLAG_WRITE);
+    if (!(fmtCtx_->oformat->flags & AVFMT_NOFILE)) {
+        ret = avio_open(&fmtCtx_->pb, encodedUrl.constData(), AVIO_FLAG_WRITE);
         if (ret < 0) {
-            qDebug() << "Failed to open output URL:" << target.url;
-            if(type == MuxerType::Record){
-                StatusBarManager::getInstance().showMessage("文件路径 " + target.url + " 错误！",MessageType::Warning);
-            }else{
-                StatusBarManager::getInstance().showMessage("服务器 " + target.url + " 未启动！",MessageType::Warning);
-            }
-
-            // 释放自定义AVIO
-            if (target.customAvioCtx) {
-                av_freep(&target.customAvioCtx->buffer);
-                avio_context_free(&target.customAvioCtx);
-            }
-            avformat_free_context(target.fmtCtx);
+            StatusBarManager::getInstance().showMessage(
+                "文件路径 " + url_ + " 错误！", MessageType::Warning);
+            avformat_free_context(fmtCtx_);
+            fmtCtx_ = nullptr;
             return false;
-        }else {
-            qDebug() << "成功创建文件:" << target.url;  // 确认文件被创建
         }
     }
-
-    targets_.push_back(std::move(target));
-    initialized_ = true;
-    qDebug() << "Muxer init sucessfully!";
-
     return true;
 }
 
-bool Muxer::writeHeader()
+bool Muxer::initPublisher()
 {
-    if (!initialized_) {
-        qDebug() << "Muxer not initialized";
+    if (!url_.startsWith("rtmp://", Qt::CaseInsensitive)) {
+        qWarning() << "RTMP SDK only supports rtmp:// URLs:" << url_;
         return false;
     }
 
-    for (auto& target : targets_) {
-        if (!target.headerWritten) {
-            int ret = avformat_write_header(target.fmtCtx, nullptr);
-            if (ret < 0) {
-                qDebug() << "Failed to write header for:" << target.url;
-                return false;
-            }
-            target.headerWritten = true;
-        }
-    }
+    rtmp::PublisherConfig config;
+    config.url = url_.toStdString();
+    config.connectTimeoutMs = 8000;
+    config.statsIntervalMs = 1000;
 
+    publisher_ = std::make_unique<rtmp::Publisher>(config);
+    publisher_->onState([this](rtmp::SessionState state, const std::string& detail) {
+        pushState_.store(state);
+        const QString stateDetail = QString::fromStdString(detail);
+        NetMonitor::instance()->updateSessionState(state, stateDetail);
+        qInfo() << "[RTMP SDK]" << rtmp::toString(state) << stateDetail;
+    });
+    publisher_->onStats([](const rtmp::RtmpStats& stats) {
+        NetMonitor::instance()->updateRtmpStats(stats);
+    });
     return true;
 }
 
 bool Muxer::addStream(AVCodecContext* codecCtx, AVMediaType type)
 {
-    if (targets_.empty()) {
-        qDebug() << "No output targets to add stream to.";
+    if (!codecCtx) return false;
+    if (type_ == MuxerType::Push) {
+        return configurePublisherStream(codecCtx, type);
+    }
+    return addRecordStream(codecCtx, type);
+}
+
+bool Muxer::addRecordStream(AVCodecContext* codecCtx, AVMediaType type)
+{
+    if (!fmtCtx_) return false;
+
+    AVStream* stream = avformat_new_stream(fmtCtx_, nullptr);
+    if (!stream || avcodec_parameters_from_context(stream->codecpar, codecCtx) < 0) {
+        qWarning() << "Failed to add recording stream for" << url_;
         return false;
     }
+    stream->time_base = codecCtx->time_base;
 
-    for (auto& target : targets_) {
-        AVStream* stream = avformat_new_stream(target.fmtCtx, nullptr);
-        if (!stream) {
-            qDebug() << "Failed to create stream for:" << target.url;
+    if (type == AVMEDIA_TYPE_AUDIO) {
+        audioStream_ = stream;
+        timeBaseAudio_ = codecCtx->time_base;
+    } else if (type == AVMEDIA_TYPE_VIDEO) {
+        videoStream_ = stream;
+        timeBaseVideo_ = codecCtx->time_base;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool Muxer::configurePublisherStream(AVCodecContext* codecCtx, AVMediaType type)
+{
+    if (!publisher_) return false;
+
+    if (type == AVMEDIA_TYPE_VIDEO) {
+        if (codecCtx->codec_id != AV_CODEC_ID_H264) {
+            qWarning() << "RTMP SDK requires H.264 video";
             return false;
         }
-
-        int ret = avcodec_parameters_from_context(stream->codecpar, codecCtx);
-        if (ret < 0) {
-            qDebug() << "Failed to copy codec parameters for:" << target.url;
+        rtmp::VideoParams params = rtmp::bridge::videoParamsFrom(codecCtx);
+        if (params.sps.empty() || params.pps.empty()) {
+            qWarning() << "Cannot extract H.264 SPS/PPS for RTMP publishing";
             return false;
         }
-
-        qDebug() << "添加" << (type == AVMEDIA_TYPE_VIDEO ? "视频" : "音频")
-                 << "流，编码格式:" << avcodec_get_name(codecCtx->codec_id)
-                 << "时间基:" << codecCtx->time_base.num << "/" << codecCtx->time_base.den;
-
-        stream->time_base = codecCtx->time_base;
-
-        if (type == AVMEDIA_TYPE_AUDIO) {
-            target.audioStream = stream;
-            target.timeBaseAudio = codecCtx->time_base;
-        } else if (type == AVMEDIA_TYPE_VIDEO) {
-            target.videoStream = stream;
-            target.timeBaseVideo = codecCtx->time_base;
-        }
+        publisher_->setVideoParams(params);
+        timeBaseVideo_ = codecCtx->time_base;
+        return true;
     }
 
+    if (type == AVMEDIA_TYPE_AUDIO) {
+        if (codecCtx->codec_id != AV_CODEC_ID_AAC) {
+            qWarning() << "RTMP SDK requires AAC audio";
+            return false;
+        }
+        rtmp::AudioParams params = rtmp::bridge::audioParamsFrom(codecCtx);
+        publisher_->setAudioParams(params);
+        timeBaseAudio_ = codecCtx->time_base;
+        return true;
+    }
+    return false;
+}
+
+bool Muxer::writeHeader()
+{
+    if (headerWritten_) return true;
+
+    if (type_ == MuxerType::Push) {
+        if (!publisher_ || !publisher_->start()) {
+            qWarning() << "Failed to start RTMP SDK publisher for" << url_;
+            return false;
+        }
+        headerWritten_ = true;
+        return true;
+    }
+
+    if (!fmtCtx_ || avformat_write_header(fmtCtx_, nullptr) < 0) {
+        qWarning() << "Failed to write recording header for" << url_;
+        return false;
+    }
+    headerWritten_ = true;
     return true;
 }
 
 bool Muxer::writePacket(AVPacket* pkt, AVMediaType type)
 {
+    if (!pkt || !headerWritten_) return false;
+    return type_ == MuxerType::Push ? pushPacket(pkt, type)
+                                    : writeRecordPacket(pkt, type);
+}
 
-    for (auto& target : targets_) {
-        if (!target.headerWritten) {
-            qDebug() << "writePacket called before writeHeader for:" << target.url;
-            return false;
-        }
+bool Muxer::pushPacket(AVPacket* pkt, AVMediaType type)
+{
+    if (!publisher_) return false;
 
-        AVStream* stream = nullptr;
-        AVRational srcTimebase;
-        int64_t* startPts = nullptr;
-
-        if (type == AVMEDIA_TYPE_AUDIO) {
-            stream = target.audioStream;
-            srcTimebase = target.timeBaseAudio;
-            startPts = &target.startPtsAudio;
-            // qDebug() << "audio pkt pts " << pkt->pts;
-            //          << "dts " << pkt->dts
-            //          << "duration " << pkt->duration
-            //          << " srcTimebase " << srcTimebase.num << "/" << srcTimebase.den
-            //          << " target timebase " << stream->time_base.num << "/" << stream->time_base.den;
-        } else if (type == AVMEDIA_TYPE_VIDEO) {
-            stream = target.videoStream;
-            srcTimebase = target.timeBaseVideo;
-            startPts = &target.startPtsVideo;
-            // qDebug() << "video pkt pts " << pkt->pts
-            //          << "dts " << pkt->dts
-            //          << "duration " << pkt->duration
-            //          << " srcTimebase " << srcTimebase.num << "/" << srcTimebase.den
-            //          << " target timebase " << stream->time_base.num << "/" << stream->time_base.den;
-        }
-
-        if (!stream) {
-            qDebug() << "No stream for type" << type << "in target" << target.url;
-            continue;
-        }
-
-        AVPacket pktCopy;
-        av_packet_ref(&pktCopy, pkt);
-
-        correctPtsDts(&pktCopy, stream, srcTimebase, *startPts);
-        pktCopy.stream_index = stream->index;
-
-        int ret = av_interleaved_write_frame(target.fmtCtx, &pktCopy);
-        if (ret < 0) {
-            // qDebug() << "Failed to write packet to:" << target.url;
-        }
-
-        av_packet_unref(&pktCopy);
+    AVPacket packet = *pkt;
+    std::vector<uint8_t> scratch;
+    if (type == AVMEDIA_TYPE_VIDEO) {
+        packet.time_base = timeBaseVideo_;
+        rtmp::MediaSample sample = rtmp::bridge::fromVideoPacket(&packet, scratch);
+        return publisher_->pushVideo(sample);
     }
+    if (type == AVMEDIA_TYPE_AUDIO) {
+        packet.time_base = timeBaseAudio_;
+        rtmp::MediaSample sample = rtmp::bridge::fromAudioPacket(&packet, scratch);
+        return publisher_->pushAudio(sample);
+    }
+    return false;
+}
 
-    return true;
+bool Muxer::writeRecordPacket(AVPacket* pkt, AVMediaType type)
+{
+    AVStream* stream = type == AVMEDIA_TYPE_AUDIO ? audioStream_ : videoStream_;
+    AVRational timeBase = type == AVMEDIA_TYPE_AUDIO ? timeBaseAudio_ : timeBaseVideo_;
+    int64_t& startPts = type == AVMEDIA_TYPE_AUDIO ? startPtsAudio_ : startPtsVideo_;
+    if (!fmtCtx_ || !stream) return false;
+
+    AVPacket packet;
+    if (av_packet_ref(&packet, pkt) < 0) return false;
+    correctPtsDts(&packet, stream, timeBase, startPts);
+    packet.stream_index = stream->index;
+    const int ret = av_interleaved_write_frame(fmtCtx_, &packet);
+    av_packet_unref(&packet);
+    return ret >= 0;
 }
 
 void Muxer::writeTrailer()
 {
-
-    for (auto& target : targets_) {
-        if (target.fmtCtx) {
-            if (target.headerWritten) {
-                // 写入文件尾，检查错误
-                int ret = av_write_trailer(target.fmtCtx);
-                QString info;
-                if (ret < 0) {
-                    qCritical() << "av_write_trailer失败！错误码:" << ret
-                                << "描述:" << av_err2str(ret);
-                    info = "文件 " + target.url + " 保存失败！";
-                    if(target.type_ == MuxerType::Record){
-                        StatusBarManager::getInstance().showMessage(info,MessageType::Error,8000);
-                    }
-                } else {
-                    info = "文件已经保存至 "  + target.url;
-                    qDebug() << info;
-                    if(target.type_ == MuxerType::Record){
-                        StatusBarManager::getInstance().showMessage(info,MessageType::Info,8000);
-                    }
-                }
-                target.headerWritten = false;
-            }
-
-            // ====================== 释放自定义AVIO ======================
-            if (target.customAvioCtx) {
-                av_freep(&target.customAvioCtx->buffer);
-                avio_context_free(&target.customAvioCtx);
-                target.customAvioCtx = nullptr;
-            }
-            // ============================================================
-
-            // 无论写入尾是否成功，都必须关闭文件句柄
-            if (!(target.fmtCtx->oformat->flags & AVFMT_NOFILE) && target.fmtCtx->pb) {
-                avio_closep(&target.fmtCtx->pb);  // 关闭IO
-            }
-
-            avformat_free_context(target.fmtCtx);  // 释放格式上下文
-            target.fmtCtx = nullptr;
-        }
+    if (type_ == MuxerType::Push) {
+        closePublisher();
+    } else {
+        closeRecorder();
     }
-    targets_.clear();
-    initialized_ = false;
 }
 
 void Muxer::close()
 {
-    writeTrailer();
+    closePublisher();
+    closeRecorder();
 }
 
-int Muxer::customWriteCallback(void* opaque, const uint8_t* buf, int buf_size)
+void Muxer::closePublisher()
 {
-    // 1. 取回你传入的 OutputTarget 对象
-    OutputTarget* target = (OutputTarget*)opaque;
-
-    // ===================== 网络监测核心 =====================
-    if (target->type_ == MuxerType::Push) {
-        // 统计发送字节 → 计算上行带宽
-        qDebug() << "buf_size" << buf_size;
-        NetMonitor::instance()->addSendBytes(buf_size);
-
-        // 弱网/丢包模拟：返回-1代表写入失败
-        // if (网络阻塞) {
-        //     NetMonitor::instance()->addSendFailed();
-        //     return -1;
-        // }
+    if (publisher_) {
+        publisher_->stop();
+        publisher_.reset();
     }
-    // ======================================================
-
-    // 返回写入的字节数（固定返回buf_size，代表发送成功）
-    return buf_size;
+    pushState_.store(rtmp::SessionState::Stopped);
+    if (type_ == MuxerType::Push) headerWritten_ = false;
 }
 
-void Muxer::correctPtsDts(AVPacket* pkt, AVStream* stream, AVRational srcTimebase, int64_t& startPts)
+void Muxer::closeRecorder()
 {
-    // 1. 起始点设为0（相对时间戳从0开始）
-    if (startPts == AV_NOPTS_VALUE) {
-        startPts = pkt->pts;  // 记录第一帧的绝对pts
-        qDebug() << "pkt start pts : " << startPts;
+    if (!fmtCtx_) return;
+
+    if (headerWritten_) {
+        const int ret = av_write_trailer(fmtCtx_);
+        if (ret < 0) {
+            StatusBarManager::getInstance().showMessage(
+                "文件 " + url_ + " 保存失败！", MessageType::Error, 8000);
+        } else {
+            StatusBarManager::getInstance().showMessage(
+                "文件已经保存至 " + url_, MessageType::Info, 8000);
+        }
     }
+    if (!(fmtCtx_->oformat->flags & AVFMT_NOFILE) && fmtCtx_->pb) {
+        avio_closep(&fmtCtx_->pb);
+    }
+    avformat_free_context(fmtCtx_);
+    fmtCtx_ = nullptr;
+    audioStream_ = nullptr;
+    videoStream_ = nullptr;
+    headerWritten_ = false;
+}
 
-    // 计算相对时间戳（相对于第一帧）
-    int64_t relativePts = pkt->pts - startPts;
-    int64_t relativeDts = pkt->dts - startPts;
+void Muxer::correctPtsDts(AVPacket* pkt, AVStream* stream,
+                          AVRational srcTimebase, int64_t& startPts)
+{
+    int64_t reference = pkt->dts != AV_NOPTS_VALUE ? pkt->dts : pkt->pts;
+    if (startPts == AV_NOPTS_VALUE) startPts = reference;
 
-    // 防止相对时间戳为负
-    if (relativePts < 0) relativePts = 0;
-    if (relativeDts < 0) relativeDts = 0;
-
-    // 2. 确保时间基转换正确（源时间基→目标时间基）
-
-    pkt->pts = av_rescale_q(relativePts, srcTimebase, stream->time_base);
-    pkt->dts = av_rescale_q(relativeDts, srcTimebase, stream->time_base);
+    if (pkt->pts != AV_NOPTS_VALUE) {
+        pkt->pts = av_rescale_q(qMax<int64_t>(0, pkt->pts - startPts),
+                                srcTimebase, stream->time_base);
+    }
+    if (pkt->dts != AV_NOPTS_VALUE) {
+        pkt->dts = av_rescale_q(qMax<int64_t>(0, pkt->dts - startPts),
+                                srcTimebase, stream->time_base);
+    }
     pkt->duration = av_rescale_q(pkt->duration, srcTimebase, stream->time_base);
-
-    // 3. 打印转换前后的时间（调试用）
-    // qDebug() << (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO ? "视频" : "音频")
-    //          << "原始pts:" << pkt->pts << "相对pts:" << relativePts
-    //          << "转换后pts:" << pkt->pts << "目标时间基:" << stream->time_base.num << "/" << stream->time_base.den;
 }
 
-
-// 1. 启动监测（推流成功后调用）
-void Muxer::startNetworkMonitor()
+void Muxer::onRequestKeyframe(std::function<void()> callback)
 {
-    if(!m_networkTimer){
-        m_networkTimer = new QTimer(this);
-        m_networkTimer->setInterval(1000); // 1秒测一次
-        connect(m_networkTimer, &QTimer::timeout, this, &Muxer::onNetworkStatsTimer);
-    }
-    m_networkTimer->start();
-    qDebug() << "网络监测启动";
-}
-
-// 2. 停止监测（停止推流时调用）
-void Muxer::stopNetworkMonitor()
-{
-    if(m_networkTimer){
-        m_networkTimer->stop();
-        qDebug() << "网络监测关闭";
-    }
-}
-
-// 3. ✅ 核心定时器：每秒执行【RTT监测 + 缓冲区监测】
-void Muxer::onNetworkStatsTimer()
-{
-    for (auto& target : targets_) {
-        if (target.type_ != MuxerType::Push) {
-            continue;
-        }
-
-        // 1. RTMP Ping 测延迟（上面的代码）
-        QElapsedTimer pingTimer;
-        pingTimer.start();
-        av_write_frame(target.fmtCtx, nullptr);
-        int rtt_ms = pingTimer.elapsed();
-        NetMonitor::instance()->updateRTT(rtt_ms);
-
-        // ====================== 2. 读取 FFmpeg 发送缓冲区 ======================
-        if (target.customAvioCtx) {
-            AVIOContext* avio = target.customAvioCtx;
-
-            // 计算：缓冲区中**待发送的堆积数据**（单位：字节）
-            qint64 buffer_bytes = avio->buf_end - avio->buf_ptr;
-
-            // 传给监测类 → 自动计算【缓冲时长】（卡顿核心指标）
-            NetMonitor::instance()->updateBufferSize(buffer_bytes);
-        }
-        // ====================================================================
-    }
+    if (publisher_) publisher_->onRequestKeyframe(std::move(callback));
 }

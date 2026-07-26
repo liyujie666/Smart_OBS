@@ -25,7 +25,7 @@ public slots:
     void onFPSInfoUpdated(double frameRate);
     void onShowNetWorkLabel();
     void onHideNetWorkLabel();
-    void onStreamPushingInfoUpdated(const NetworkMonitorResult& result);
+    void onStreamPushingInfoUpdated(const NetworkStats& stats);
     void onNetworkStatusUpdated(NetworkStatus status);
 
 private:

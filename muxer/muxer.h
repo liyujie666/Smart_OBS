@@ -5,14 +5,20 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 }
-#include <QTimer>
+
+#include <QObject>
 #include <QString>
-#include <vector>
+#include <atomic>
+#include <functional>
+#include <memory>
+
+#include "rtmp/publisher.h"
 
 enum class MuxerType {
     Record,
     Push
 };
+
 class Muxer : public QObject
 {
     Q_OBJECT
@@ -20,56 +26,42 @@ public:
     Muxer();
     ~Muxer();
 
-    // 初始化输出，支持多个调用，先初始化不写头
-    bool init(const QString& url,MuxerType type,const QString& format = "mp4");
-
-    // 写入所有输出的头
+    bool init(const QString& url, MuxerType type, const QString& format = "mp4");
     bool writeHeader();
-
-    // 添加音视频流
     bool addStream(AVCodecContext* codecCtx, AVMediaType type);
-
-    // 写入包，要求先写头
     bool writePacket(AVPacket* pkt, AVMediaType type);
-
-    // 写入尾部，关闭释放
     void writeTrailer();
-
-    // 关闭并释放资源
     void close();
 
-    void startNetworkMonitor();
-    void stopNetworkMonitor();
-private slots:
+    void onRequestKeyframe(std::function<void()> callback);
 
-    void onNetworkStatsTimer();
+    bool isPushTarget() const { return type_ == MuxerType::Push; }
+    rtmp::SessionState pushState() const { return pushState_.load(); }
 
 private:
-    struct OutputTarget {
-        QString url;
-        QString format;
-        AVFormatContext* fmtCtx = nullptr;
-        AVStream* audioStream = nullptr;
-        AVStream* videoStream = nullptr;
-        AVRational timeBaseAudio;
-        AVRational timeBaseVideo;
-        int64_t startPtsAudio = AV_NOPTS_VALUE;
-        int64_t startPtsVideo = AV_NOPTS_VALUE;
-        bool headerWritten = false;
-        MuxerType type_;
+    QString url_;
+    MuxerType type_ = MuxerType::Record;
+    QString format_;
+    AVFormatContext* fmtCtx_ = nullptr;
+    AVStream* audioStream_ = nullptr;
+    AVStream* videoStream_ = nullptr;
+    AVRational timeBaseAudio_{0, 1};
+    AVRational timeBaseVideo_{0, 1};
+    int64_t startPtsAudio_ = AV_NOPTS_VALUE;
+    int64_t startPtsVideo_ = AV_NOPTS_VALUE;
+    bool headerWritten_ = false;
 
-        // 自定义AVIO（用于推流网络监测）
-        AVIOContext* customAvioCtx = nullptr;
-        uint8_t* avioBuffer = nullptr;
-        const int avioBufferSize = 1024 * 1024; // 1M缓冲区
-    };
+    std::unique_ptr<rtmp::Publisher> publisher_;
+    std::atomic<rtmp::SessionState> pushState_{rtmp::SessionState::Idle};
 
-    std::vector<OutputTarget> targets_;
-    bool initialized_ = false;
-
-    QTimer* m_networkTimer = nullptr;
-
-    static int customWriteCallback(void* opaque, const uint8_t* buf, int buf_size);
+    bool initRecorder(const QString& format);
+    bool initPublisher();
+    bool addRecordStream(AVCodecContext* codecCtx, AVMediaType type);
+    bool configurePublisherStream(AVCodecContext* codecCtx, AVMediaType type);
+    bool writeRecordPacket(AVPacket* pkt, AVMediaType type);
+    bool pushPacket(AVPacket* pkt, AVMediaType type);
+    void closeRecorder();
+    void closePublisher();
     void correctPtsDts(AVPacket* pkt, AVStream* stream, AVRational srcTimebase, int64_t& startPts);
 };
 

@@ -52,6 +52,7 @@ public:
 
     void setNextPts(int64_t videoPts) { videoPts_ = videoPts; }
     void setBitrate(int targetBitrate);
+    void requestKeyframe() { forceKeyframe_.store(true); }
     // 获取编码参数（用于Muxer配置）
     const videoEncodeConfig& getConfig() const { return config_; }
     AVCodecContext* getCodecContext() const { return codecCtx_; }
@@ -96,14 +97,16 @@ private:
     // 帧率时间基（用于计算PTS）
     AVRational time_base_ = {1, 90000};  // 标准90kHz时间基
     int64_t videoPts_ = 0;
+    std::atomic<bool> forceKeyframe_{false};
 
     // 编码统计相关
-    std::atomic<int> encodedFrameCount_ = 0;       // 已编码总帧数（原子变量，支持多线程安全）
-    std::atomic<int> delayedFrameCount_ = 0;       // 延迟帧总数（编码耗时超过阈值的帧）
+    std::atomic<int> encodedFrameCount_ = 0;       // 成功送入编码器的输入帧数
+    std::atomic<int> delayedFrameCount_ = 0;       // 处理耗时超过单帧预算的输入帧数
+    mutable std::mutex codecMutex_;
     mutable std::mutex delayStatsMutex_;                   // 延迟统计的互斥锁
-    qint64 totalEncodeTime_ = 0;                   // 累计编码总耗时（毫秒）
-    int maxAcceptableDelay_ = 40;                  // 可接受的最大编码延迟（毫秒，根据需求调整，如25fps对应40ms）
-    std::vector<qint64> recentDelays_;             // 最近N帧的编码延迟（用于实时监控）
+    double totalEncodeTime_ = 0.0;                   // 累计编码总耗时（毫秒）
+    double maxAcceptableDelay_ = 1000.0 / 30.0;                  // 可接受的最大编码延迟（毫秒，根据需求调整，如25fps对应40ms）
+    std::vector<double> recentDelays_;             // 最近N帧的编码延迟（用于实时监控）
     const int kRecentDelayWindow_ = 30;            // 最近帧的窗口大小（如30帧）
 
 };

@@ -9,8 +9,8 @@
 
 // }
 
-StreamController::StreamController(ThreadPool* threadPools,CudaRenderWidget* openglWidget,NetworkMonitor* networkMonitor,QObject* parent)
-    :QObject(parent),networkMonitor_(networkMonitor),threadPools_(threadPools),openglWidget_(openglWidget)
+StreamController::StreamController(ThreadPool* threadPools,CudaRenderWidget* openglWidget,NetMonitor* netMonitor,QObject* parent)
+    :QObject(parent),netMonitor_(netMonitor),threadPools_(threadPools),openglWidget_(openglWidget)
 {
 
     fpsCounter_ = std::make_unique<FPSCounter>();
@@ -21,13 +21,13 @@ StreamController::StreamController(ThreadPool* threadPools,CudaRenderWidget* ope
     vEncoder_ = std::make_unique<VEncoder>(vPktQueue_.get()); // 传递原始指针
     aEncoder_ = std::make_unique<AEncoder>(aPktQueue_.get());
     mixProcessor_ = std::make_unique<AudioMixProcessor>(syncClock_.get());
-    if(networkMonitor_) networkMonitor_->setVEncoder(vEncoder_.get());
-    dynamicBitrateCtrl_ = std::make_unique<DynamicBitrateController>(vPktQueue_.get(), aPktQueue_.get(),vEncoder_.get(),aEncoder_.get(),networkMonitor_);
+    dynamicBitrateCtrl_ = std::make_unique<DynamicBitrateController>(vPktQueue_.get(), aPktQueue_.get(),vEncoder_.get(),aEncoder_.get(),netMonitor_);
     openglWidget_->setSyncClock(syncClock_.get());
 
     StatusBarManager::getInstance().bindFPSCounter(fpsCounter_.get());
-    StatisticsDialog::getInstance()->setNetWorkMonitors(networkMonitor_);
-    StatisticsDialog::getInstance()->setEncodeConfig(vEncoder_.get(),fpsCounter_.get());
+    StatisticsDialog::getInstance()->setNetWorkMonitors(netMonitor_);
+    StatisticsDialog::getInstance()->setEncodeConfig(vEncoder_.get(), fpsCounter_.get(),
+                                                     openglWidget_);
     connect(dynamicBitrateCtrl_.get(), &DynamicBitrateController::bitrateAdjusted,
             this, [](int oldBitrate, int newBitrate, BitrateAdjustState state) {
                 QString stateStr = (state == BitrateAdjustState::Raising) ? "回升" : "降低";
@@ -62,6 +62,10 @@ bool StreamController::start()
 
     if (config_.enableStream) {
         if(!muxerManager_->addOutput(MuxerType::Push,config_.streamUrl,"flv")) return false;
+    }
+
+    if (config_.enableStream) {
+        config_.vEnConfig.format = "flv";
     }
 
     // 初始化编码器
@@ -105,6 +109,11 @@ bool StreamController::start()
     }
 
     // 写入muxer头部
+    if (config_.enableStream) {
+        muxerManager_->onRequestKeyframe([this] {
+            if (vEncoder_) vEncoder_->requestKeyframe();
+        });
+    }
     if (!muxerManager_->startAll()) {
         qDebug() << "Failed to write header for muxer";
         return false;

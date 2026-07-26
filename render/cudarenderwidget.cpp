@@ -7,6 +7,21 @@
 #include "transition/transitionmanager.h"
 #include <QOpenGLContext>
 #include <QDebug>
+#include <QElapsedTimer>
+#include <functional>
+
+namespace {
+class RenderStatsScope {
+public:
+    RenderStatsScope(CudaRenderWidget* widget, QElapsedTimer* timer)
+        : widget_(widget), timer_(timer) {}
+    ~RenderStatsScope();
+
+private:
+    CudaRenderWidget* widget_;
+    QElapsedTimer* timer_;
+};
+}
 
 // 边框顶点着色器
 static const char* borderVertexShaderSrc = R"(
@@ -299,8 +314,14 @@ QOpenGLContext* CudaRenderWidget::getMainGLContext() {
 
 void CudaRenderWidget::offscreenRender()
 {
+    QElapsedTimer renderTimer;
+    renderTimer.start();
     // 仅在录屏时执行
     if (!isRecording_ || !syncClock_->isValid() || !sceneManager_) return;
+    auto renderStatsGuard = std::unique_ptr<void, std::function<void(void*)>>(
+        this, [this, &renderTimer](void*) {
+            recordRenderDelay(renderTimer.nsecsElapsed() / 1000000.0);
+        });
 
     TransitionManager* tm = TransitionManager::getInstance();
 
@@ -443,6 +464,28 @@ void CudaRenderWidget::offscreenRender()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     doneCurrent();
 }
+void CudaRenderWidget::recordRenderDelay(double elapsedMs)
+{
+    ++renderedFrameCount_;
+    if (fboFPS_ > 0.0 && elapsedMs > 1000.0 / fboFPS_) {
+        ++delayedRenderFrameCount_;
+    }
+    std::lock_guard<std::mutex> lock(renderStatsMutex_);
+    recentRenderDelaysMs_.push_back(elapsedMs);
+    if (recentRenderDelaysMs_.size() > RenderDelayWindow) {
+        recentRenderDelaysMs_.pop_front();
+    }
+}
+
+double CudaRenderWidget::getRecentAverageRenderDelay() const
+{
+    std::lock_guard<std::mutex> lock(renderStatsMutex_);
+    if (recentRenderDelaysMs_.empty()) return 0.0;
+    double total = 0.0;
+    for (double delay : recentRenderDelaysMs_) total += delay;
+    return total / static_cast<double>(recentRenderDelaysMs_.size());
+}
+
 void CudaRenderWidget::initializeGL()
 {
     initializeOpenGLFunctions();
@@ -1074,6 +1117,12 @@ void CudaRenderWidget::setRecording(bool record)
 
     if (record) {
         // 启动定时器开始录制
+        renderedFrameCount_ = 0;
+        delayedRenderFrameCount_ = 0;
+        {
+            std::lock_guard<std::mutex> lock(renderStatsMutex_);
+            recentRenderDelaysMs_.clear();
+        }
         m_renderTimer->startTimer();
         if(fbo_ == 0) initFBO();
 

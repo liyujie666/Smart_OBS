@@ -1,5 +1,4 @@
 #include "statusbarmanager.h"
-#include "monitor/networkmonitor.h"
 #include <QString>
 
 StatusBarManager::StatusBarManager(QObject *parent)
@@ -81,20 +80,24 @@ void StatusBarManager::updateCpuUsage(double usage)
 
 }
 
-void StatusBarManager::updateNetworkSatus(const NetworkMonitorResult& result)
+void StatusBarManager::updateNetworkInfo(const NetworkStats& stats)
 {
-    NetworkStatus status = getNetworkStatus(result.delayMs);
-    emit networkStatusUpdated(status);
-}
-
-void StatusBarManager::updateSteamInfo(const NetworkMonitorResult &result)
-{
-    emit steamInfoUpdated(result);
+    emit streamNetworkInfoUpdated(stats);
+    emit networkStatusUpdated(getNetworkStatus(stats));
 }
 
 void StatusBarManager::bindFPSCounter(FPSCounter *fpsCounter)
 {
     connect(fpsCounter,&FPSCounter::fpsInfoUpdated,this,&StatusBarManager::updateFrameRate);
+}
+
+void StatusBarManager::bindNetMonitor(NetMonitor* netMonitor)
+{
+    if (!netMonitor || netMonitor_ == netMonitor) return;
+    netMonitor_ = netMonitor;
+    connect(netMonitor_, &NetMonitor::statsUpdated,
+            this, &StatusBarManager::updateNetworkInfo,
+            Qt::UniqueConnection);
 }
 
 void StatusBarManager::setIsPushing(bool isPush)
@@ -168,22 +171,16 @@ void StatusBarManager::updateStatusText()
     }
 }
 
-NetworkStatus StatusBarManager::getNetworkStatus(int delayMs)
+NetworkStatus StatusBarManager::getNetworkStatus(const NetworkStats& stats) const
 {
-    NetworkStatus status;
-    if(delayMs == -1){
-        status = NetworkStatus::Disconnected;
-    }else if(delayMs >= 0 && delayMs < 50){
-        status = NetworkStatus::Good;
-    }else if(delayMs >= 50 && delayMs < 120){
-        status = NetworkStatus::Normal;
-    }else if(delayMs >= 120 && delayMs < 200){
-        status = NetworkStatus::NotBad;
-    }else {
-        status = NetworkStatus::Bad;
+    if (!stats.isStreaming()) return NetworkStatus::Disconnected;
+    switch (stats.networkLevel) {
+    case 0: return NetworkStatus::Good;
+    case 1: return NetworkStatus::Normal;
+    case 2: return NetworkStatus::NotBad;
+    case 3: return NetworkStatus::Bad;
+    default: return NetworkStatus::Disconnected;
     }
-
-    return status;
 }
 
 void StatusBarManager::release()

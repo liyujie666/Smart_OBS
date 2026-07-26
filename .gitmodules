@@ -1,0 +1,3 @@
+[submodule "librtmp_push"]
+	path = librtmp_push
+	url = git@github.com:liyujie666/rtmp_sdk.git

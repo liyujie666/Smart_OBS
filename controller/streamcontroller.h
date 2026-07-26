@@ -8,7 +8,7 @@
 #include <thread/threadpool.h>
 #include <mixer/audiomixprocessor.h>
 #include <statusbar/statusbarmanager.h>
-#include <monitor/networkmonitor.h>
+#include <monitor/netmonitor.h>
 #include <controller/dynamicbitratecontroller.h>
 #include <QObject>
 #include <QWaitCondition>
@@ -25,7 +25,7 @@ class StreamController : public QObject
 {
     Q_OBJECT
 public:
-    StreamController(ThreadPool* threadPools,CudaRenderWidget* openglWidget,NetworkMonitor* networkMonitor,QObject* parent = nullptr);
+    StreamController(ThreadPool* threadPools,CudaRenderWidget* openglWidget,NetMonitor* netMonitor,QObject* parent = nullptr);
     ~StreamController();
 
     bool start();
@@ -65,8 +65,7 @@ private:
     std::unique_ptr<DynamicBitrateController> dynamicBitrateCtrl_;
 
     StreamConfig config_;
-    NetworkMonitor* networkMonitor_;
-    NetworkMonitor* tcpMonitor_;
+    NetMonitor* netMonitor_;
     ThreadPool* threadPools_;
     std::thread videoThread_;
     std::thread videoMuxThread_;

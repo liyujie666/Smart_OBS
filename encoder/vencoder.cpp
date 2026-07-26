@@ -1,6 +1,7 @@
 #include "vencoder.h"
 #include "pool/gloabalpool.h"
 #include <QDebug>
+#include <algorithm>
 
 VEncoder::VEncoder(PacketQueue* vEnPktQueue)
     :vEnPktQueue_(vEnPktQueue)
@@ -20,6 +21,8 @@ bool VEncoder::init(const videoEncodeConfig &config)
 {
     // 1. 保存配置并检查有效性
     config_ = config;
+    maxAcceptableDelay_ = 1000.0 /
+        static_cast<double>(config_.framerate > 0 ? config_.framerate : 30);
     resetEncodeStats();
     if (config_.width <= 0 || config_.height <= 0 || config_.framerate <= 0 || config_.format.isEmpty()) {
         qDebug() << "Invalid encoder config";
@@ -148,6 +151,7 @@ bool VEncoder::encode(cudaArray_t cuda_array)
 
     QElapsedTimer frameTimer;
     frameTimer.start();
+    std::lock_guard<std::mutex> codecLock(codecMutex_);
 
     if (!is_initialized_ || !cuda_array || !frame_ || !codecCtx_) {
         return false;
@@ -174,6 +178,8 @@ bool VEncoder::encode(cudaArray_t cuda_array)
     }
 
     frame_->pts = av_rescale_q(videoPts_,AV_TIME_BASE_Q,codecCtx_->time_base);
+    frame_->pict_type = forceKeyframe_.exchange(false) ? AV_PICTURE_TYPE_I
+                                                       : AV_PICTURE_TYPE_NONE;
 
     // qDebug() << "Video frame PTS (encoder timebase):" << frame_->pts;
 
@@ -271,13 +277,14 @@ bool VEncoder::encode(cudaArray_t cuda_array)
         }
 
         vEnPktQueue_->push(pkt);
-        encodedFrameCount_++;
+
         pkt = GlobalPool::getPacketPool().get();
     }
     GlobalPool::getPacketPool().recycle(pkt);
 
 
-    qint64 frameEncodeTime = frameTimer.elapsed();
+    const double frameEncodeTime = frameTimer.nsecsElapsed() / 1000000.0;
+    ++encodedFrameCount_;
 
     // 统计延迟帧（若耗时超过阈值，则视为延迟帧）
     {
@@ -349,13 +356,21 @@ void VEncoder::close()
 
 void VEncoder::setBitrate(int targetBitrate)
 {
+    std::lock_guard<std::mutex> codecLock(codecMutex_);
     if(!codecCtx_) return;
 
     codecCtx_->bit_rate = targetBitrate;
+    codecCtx_->rc_max_rate = targetBitrate;
+    codecCtx_->rc_min_rate = targetBitrate;
+    codecCtx_->rc_buffer_size = std::max(targetBitrate, targetBitrate * 2);
+
+    codecCtx_->bit_rate_tolerance = targetBitrate / 4;
+    config_.bitrate = targetBitrate;
 
     if(codec_ && codec_->name && QString(codec_->name).contains("nvenc")){
         av_opt_set_int(codecCtx_->priv_data, "max_bitrate", targetBitrate, 0);
-        av_opt_set_int(codecCtx_->priv_data, "rate_control", targetBitrate, 0);
+        av_opt_set_int(codecCtx_->priv_data, "min_bitrate", targetBitrate, 0);
+        av_opt_set_int(codecCtx_->priv_data, "bitrate", targetBitrate, 0);
     }else {
         av_opt_set_int(codecCtx_->priv_data, "bitrate", targetBitrate / 1000, 0);
         av_opt_set_int(codecCtx_->priv_data, "vbv-maxrate", targetBitrate / 1000, 0);
@@ -395,8 +410,8 @@ double VEncoder::getAverageEncodeDelay() const {
 double VEncoder::getRecentAverageDelay() const {
     std::lock_guard<std::mutex> lock(delayStatsMutex_);
     if (recentDelays_.empty()) return 0.0;
-    qint64 sum = 0;
-    for (qint64 d : recentDelays_) sum += d;
+    double sum = 0.0;
+    for (double d : recentDelays_) sum += d;
     return static_cast<double>(sum) / recentDelays_.size();
 }
 

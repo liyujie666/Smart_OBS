@@ -29,6 +29,7 @@
 #include <QStandardPaths>
 #include <QComboBox>
 #include <QTimer>
+#include <QRegularExpression>
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -43,17 +44,25 @@ MainWindow::MainWindow(QWidget *parent)
     m_threadPool = new ThreadPool(this);
     ComponentInitializer::getInstance()->init(this,m_sceneManager);
     ui->openGLWidget->setSceneManager(m_sceneManager);
-    m_networkMonitor = new NetworkMonitor(this);
-    m_tcpMonitor = new NetworkMonitor(this);
+    m_netMonitor = NetMonitor::instance();
+    StatusBarManager::getInstance().bindNetMonitor(m_netMonitor);
+    connect(m_netMonitor, &NetMonitor::sessionStateChanged,
+            this, &MainWindow::onSessionStateChanged,
+            Qt::QueuedConnection);
     initUI();
+    m_reconnectStatusTimer = new QTimer(this);
+    m_reconnectStatusTimer->setInterval(1000);
+    connect(m_reconnectStatusTimer, &QTimer::timeout, this, [this] {
+        if (m_reconnectRemainingSeconds > 0) --m_reconnectRemainingSeconds;
+        showReconnectCountdown();
+    });
     m_trayIcon.setIcon(QIcon(":/sources/app_logo.ico"));
     m_trayIcon.show();
     connect(ui->openGLWidget,&CudaRenderWidget::layerClicked,this,&MainWindow::onLayerClicked);
-    connect(m_tcpMonitor, &NetworkMonitor::serverClosed,this,&MainWindow::on_StreamPushingClosed);
-    QTimer *poolTimer = new QTimer(this);
-    poolTimer->setInterval(2000);
-    connect(poolTimer,&QTimer::timeout,this,&MainWindow::printPoolStats);
-    poolTimer->start();
+    // QTimer *poolTimer = new QTimer(this);
+    // poolTimer->setInterval(2000);
+    // connect(poolTimer,&QTimer::timeout,this,&MainWindow::printPoolStats);
+    // poolTimer->start();
 
 }
 
@@ -106,14 +115,6 @@ MainWindow::~MainWindow()
     if (m_sysMonitor) {
         delete m_sysMonitor;
         m_sysMonitor = nullptr;
-    }
-    if (m_networkMonitor) {
-        delete m_networkMonitor;
-        m_networkMonitor = nullptr;
-    }
-    if (m_tcpMonitor) {
-        delete m_tcpMonitor;
-        m_tcpMonitor = nullptr;
     }
     if (m_updateTimer) {
         m_updateTimer->stop();
@@ -1309,20 +1310,13 @@ void MainWindow::on_startBtn_clicked()
             if(!isContinue) return;
         }
 
-        if(streamConfig_.enableStream){
-            NetworkMonitorResult result = m_tcpMonitor->testTcpConnectivity("192.168.48.128",1935);
-            if(!result.isSuccess){
-                qDebug() << "result error:" << result.errorMsg;
-                StatusBarManager::getInstance().showMessage(QString("服务器未连接！"),MessageType::Warning,3000);
-                return;
-            }
-            m_networkMonitor->setMonitorParams(MonitorType::ZLMEDIAKIT,"192.168.48.128",80,"stream_key");
-            m_tcpMonitor->setMonitorParams(MonitorType::TCP_CONNECT,"192.168.48.128",1935,"",3, 5000);
-            connect(m_networkMonitor,&NetworkMonitor::monitorRealTimeResult,&StatusBarManager::getInstance(),&StatusBarManager::updateSteamInfo);
-            connect(m_tcpMonitor,&NetworkMonitor::monitorRealTimeResult,&StatusBarManager::getInstance(),&StatusBarManager::updateNetworkSatus);
+        if (streamConfig_.enableStream) {
+            m_streamHasConnected = false;
+            m_disconnectNotified = false;
+        m_reconnectAttempt = 0;
+        m_reconnectRemainingSeconds = 0;
+            m_netMonitor->reset();
             StatusBarManager::getInstance().showNetWorkLabel();
-            m_networkMonitor->start(0, 3000); // 网络监测：无限次，每3秒一次
-            m_tcpMonitor->start(0,2000);
         }
 
         // 计时器UI更新
@@ -1335,17 +1329,8 @@ void MainWindow::on_startBtn_clicked()
 
         // 初始化并打开流控制器
         if(!m_streamController) {
-            m_streamController = new StreamController(m_threadPool,ui->openGLWidget,m_networkMonitor,this);
-            connect(m_tcpMonitor, &NetworkMonitor::serverDisconnected, this, [this](MonitorType type, const QString& errorMsg) {
-                m_trayIcon.showMessage("连接断开","服务器已断开，请检查网络",QSystemTrayIcon::Warning,3000);
-                qDebug() << "[推流停止] 服务器断开（类型：" << static_cast<int>(type) << "），原因：" << errorMsg;
-                on_StreamPushingDisconnected();
-            });
-            connect(m_tcpMonitor, &NetworkMonitor::tcpReconnected, this, [this](const QString& ip, quint16 port) {
-                m_trayIcon.showMessage("连接成功","服务器已连接",QSystemTrayIcon::Information,3000);
-                qDebug() << "[推流恢复] TCP重连成功，准备恢复推流（IP：" << ip << "，端口：" << port << "）";
-                on_StreamPushingReconnected();
-            });
+            m_streamController = new StreamController(m_threadPool, ui->openGLWidget,
+                                                      m_netMonitor, this);
         }
         m_streamController->init(streamConfig_);
         if(!m_streamController->start()) return;
@@ -1426,8 +1411,7 @@ void MainWindow::on_stopBtn_clicked()
         m_updateTimer->stop();
 
     m_streamController->stop();
-    if (m_networkMonitor) m_networkMonitor->stop();
-    if(m_tcpMonitor) m_tcpMonitor->stop();
+    m_netMonitor->reset();
     m_threadPool->stopAddAudioFrame();      // TODO 录制时，暂时停止所有场景下的音频
     if(m_mediaController) m_mediaController->setRecording(false);
     ui->openGLWidget->setRecording(false);
@@ -1439,46 +1423,6 @@ void MainWindow::on_stopBtn_clicked()
 }
 
 
-void MainWindow::on_StreamPushingReconnected()
-{
-    m_streamController->init(streamConfig_);
-    if(!m_streamController->start()) return;
-    m_threadPool->startAddAudioFrame();     // TODO 录制时，暂时录制所有场景下的音频
-    if(m_mediaController) m_mediaController->setRecording(true);
-    ui->openGLWidget->setVideoConfig(streamConfig_.vEnConfig.width,streamConfig_.vEnConfig.height,streamConfig_.vEnConfig.framerate);
-    ui->openGLWidget->setRecording(true);
-
-    connect(ui->openGLWidget, &CudaRenderWidget::frameRecorded,m_streamController, &StreamController::onNewFrameAvailable,Qt::QueuedConnection);
-}
-
-void MainWindow::on_StreamPushingDisconnected()
-{
-    m_streamController->stop();
-    m_threadPool->stopAddAudioFrame();
-    if(m_mediaController) m_mediaController->setRecording(false);
-    ui->openGLWidget->setRecording(false);
-
-}
-
-void MainWindow::on_StreamPushingClosed()
-{
-    if (m_networkMonitor) m_networkMonitor->stop();
-    if(m_tcpMonitor) m_tcpMonitor->stop();
-
-    m_isRecording = false;
-    m_isPaused = false;
-    m_pausedDuration = 0;
-    m_pauseStartTime = 0;
-
-    if (m_updateTimer)
-        m_updateTimer->stop();
-
-    ui->timerLabel->setText("00:00:00");
-    ui->startBtn->setIcon(QIcon(":/sources/play.png"));
-    ui->startBtn->setDisabled(false);
-    StatusBarManager::getInstance().updateStreamStatus(StreamStatus::Stopped);StatusBarManager::getInstance().hideNetWorkLabel();
-    StatusBarManager::getInstance().hideNetWorkLabel();
-}
 void MainWindow::on_settingBtn_clicked()
 {
     outputSettingDialog dialog(this);
@@ -1682,8 +1626,91 @@ bool MainWindow::addAudioItemToMixerLayout(AudioItemWidget* audioItem)
     return true;
 }
 
+void MainWindow::onSessionStateChanged(rtmp::SessionState state, const QString& detail)
+{
+    if (!m_isRecording || !streamConfig_.enableStream) return;
+
+    auto& status = StatusBarManager::getInstance();
+    switch (state) {
+    case rtmp::SessionState::Backoff: {
+        const auto attemptMatch = QRegularExpression(QStringLiteral("attempt=(\\d+)")).match(detail);
+        const auto delayMatch = QRegularExpression(QStringLiteral("delay_ms=(\\d+)")).match(detail);
+        m_reconnectAttempt = attemptMatch.hasMatch() ? attemptMatch.captured(1).toInt()
+                                                     : m_reconnectAttempt + 1;
+        const int delayMs = delayMatch.hasMatch() ? delayMatch.captured(1).toInt() : 1000;
+        m_reconnectRemainingSeconds = qMax(1, (delayMs + 999) / 1000);
+        showReconnectCountdown();
+        m_reconnectStatusTimer->start();
+        status.showMessage(
+            QStringLiteral("网络已断开，第 %1 次重连将在 %2 秒后开始")
+                .arg(m_reconnectAttempt)
+                .arg(m_reconnectRemainingSeconds),
+            MessageType::Warning, 0);
+        if (m_streamHasConnected && !m_disconnectNotified) {
+            showDisconnectNotify(this);
+            m_disconnectNotified = true;
+        }
+        break;
+    }
+    case rtmp::SessionState::Reconnecting:
+    case rtmp::SessionState::Connecting:
+        if (m_reconnectStatusTimer) m_reconnectStatusTimer->stop();
+        if (m_streamHasConnected || m_disconnectNotified || m_reconnectAttempt > 0) {
+            status.showMessage(
+                QStringLiteral("正在进行第 %1 次重连…").arg(qMax(1, m_reconnectAttempt)),
+                               MessageType::Warning, 0);
+        }
+        break;
+    case rtmp::SessionState::Streaming:
+        if (m_reconnectStatusTimer) m_reconnectStatusTimer->stop();
+        if (m_disconnectNotified || m_reconnectAttempt > 0) {
+            status.showMessage(QStringLiteral("推流服务器重连成功"),
+                               MessageType::Success, 5000);
+            if (QSystemTrayIcon::supportsMessages()) {
+                m_trayIcon.showMessage(QStringLiteral("连接已恢复"),
+                                       QStringLiteral("推流服务器重连成功"),
+                                       QSystemTrayIcon::Information, 3000);
+            }
+        }
+        m_streamHasConnected = true;
+        m_disconnectNotified = false;
+        m_reconnectAttempt = 0;
+        m_reconnectRemainingSeconds = 0;
+        break;
+    case rtmp::SessionState::Error:
+        if (m_reconnectStatusTimer) m_reconnectStatusTimer->stop();
+        status.showMessage(
+            m_streamHasConnected
+                ? QStringLiteral("推流连接异常，准备自动重连…")
+                : QStringLiteral("无法连接推流服务器，正在自动重试…"),
+            MessageType::Error, 0);
+        if (m_streamHasConnected && !m_disconnectNotified) {
+            showDisconnectNotify(this);
+            m_disconnectNotified = true;
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+void MainWindow::showReconnectCountdown()
+{
+    if (!m_isRecording || !streamConfig_.enableStream || m_reconnectAttempt <= 0) {
+        if (m_reconnectStatusTimer) m_reconnectStatusTimer->stop();
+        return;
+    }
+    StatusBarManager::getInstance().showMessage(
+        QStringLiteral("网络已断开，第 %1 次重连将在 %2 秒后开始")
+            .arg(m_reconnectAttempt)
+            .arg(qMax(0, m_reconnectRemainingSeconds)),
+        MessageType::Warning, 0);
+}
+
 void MainWindow::showDisconnectNotify(QWidget *parent)
 {
+    Q_UNUSED(parent);
+    if (!QSystemTrayIcon::supportsMessages() || !m_trayIcon.isVisible()) return;
     m_trayIcon.showMessage(
         "连接断开",
         "服务器已断开，请检查网络",

@@ -281,6 +281,7 @@ Makefile: Smart_OBS.pro ../../6.9.0/mingw_64/mkspecs/win32-g++/qmake.conf ../../
 		../../6.9.0/mingw_64/mkspecs/features/qt_config.prf \
 		../../6.9.0/mingw_64/mkspecs/win32-g++/qmake.conf \
 		../../6.9.0/mingw_64/mkspecs/features/spec_post.prf \
+		.qmake.stash \
 		../../6.9.0/mingw_64/mkspecs/features/exclusive_builds.prf \
 		../../6.9.0/mingw_64/mkspecs/features/toolchain.prf \
 		../../6.9.0/mingw_64/mkspecs/features/default_pre.prf \
@@ -313,7 +314,6 @@ Makefile: Smart_OBS.pro ../../6.9.0/mingw_64/mkspecs/win32-g++/qmake.conf ../../
 		../../6.9.0/mingw_64/lib/Qt6Network.prl \
 		../../6.9.0/mingw_64/lib/Qt6Core.prl \
 		../../6.9.0/mingw_64/lib/Qt6EntryPoint.prl \
-		.qmake.stash \
 		../../6.9.0/mingw_64/mkspecs/features/build_pass.prf \
 		Resources.qrc \
 		release/qmake_qmake_immediate.qrc \
@@ -530,6 +530,7 @@ Makefile: Smart_OBS.pro ../../6.9.0/mingw_64/mkspecs/win32-g++/qmake.conf ../../
 ../../6.9.0/mingw_64/mkspecs/features/qt_config.prf:
 ../../6.9.0/mingw_64/mkspecs/win32-g++/qmake.conf:
 ../../6.9.0/mingw_64/mkspecs/features/spec_post.prf:
+.qmake.stash:
 ../../6.9.0/mingw_64/mkspecs/features/exclusive_builds.prf:
 ../../6.9.0/mingw_64/mkspecs/features/toolchain.prf:
 ../../6.9.0/mingw_64/mkspecs/features/default_pre.prf:
@@ -562,7 +563,6 @@ Smart_OBS.pro:
 ../../6.9.0/mingw_64/lib/Qt6Network.prl:
 ../../6.9.0/mingw_64/lib/Qt6Core.prl:
 ../../6.9.0/mingw_64/lib/Qt6EntryPoint.prl:
-.qmake.stash:
 ../../6.9.0/mingw_64/mkspecs/features/build_pass.prf:
 Resources.qrc:
 release/qmake_qmake_immediate.qrc:

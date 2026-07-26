@@ -4,7 +4,7 @@
 #include <QDialog>
 #include <QTimer>
 #include "monitor/systemmonitor.h"   // 系统监测头文件
-#include "monitor/networkmonitor.h"  // 网络监测头文件
+#include "monitor/netmonitor.h"
 
 namespace Ui {
 class StatisticsDialog;
@@ -42,6 +42,7 @@ struct SceneConfig{
 
 class VEncoder;
 class FPSCounter;
+class CudaRenderWidget;
 class StatisticsDialog : public QDialog
 {
     Q_OBJECT
@@ -67,8 +68,9 @@ public:
     void initTableWidget();
     // 设置系统/网络监测模块的引用，用于数据同步
     void setSystemMonitors(SystemMonitor* systemMonitor);
-    void setNetWorkMonitors(NetworkMonitor* networkMonitor);
-    void setEncodeConfig(VEncoder* vEncoder,FPSCounter* fpsCounter);
+    void setNetWorkMonitors(NetMonitor* netMonitor);
+    void setEncodeConfig(VEncoder* vEncoder, FPSCounter* fpsCounter,
+                         CudaRenderWidget* renderWidget = nullptr);
     void updateGlobalConfig(const GlobalConfig& config);
     void updateSceneConfig(StatisticType type, const SceneConfig& config);
     std::string formatBytes(uint64_t bytes);
@@ -78,7 +80,7 @@ public slots:
     // 定时刷新UI的槽函数
     void onRefreshTimerTimeout();
     // 推流状态实时更新槽函数（接收NetworkMonitor信号）
-    void onStreamStatusUpdated(const NetworkMonitorResult& result);
+    void onStreamStatusUpdated(const NetworkStats& stats);
 private slots:
 
     void onUpdateFps(int fps);
@@ -89,8 +91,9 @@ private:
 
     static StatisticsDialog* s_instance;
     SystemMonitor* systemMonitor_ = nullptr;   // 系统监测模块
-    NetworkMonitor* networkMonitor_ = nullptr; // 网络监测模块
+    NetMonitor* netMonitor_ = nullptr;
     VEncoder* vEncoder_ = nullptr;
+    CudaRenderWidget* renderWidget_ = nullptr;
     QTimer refreshTimer_;                      // UI刷新定时器
     GlobalConfig globalConfig_;                // 全局配置数据
     SceneConfig recordConfig_;                 // 录制配置数据

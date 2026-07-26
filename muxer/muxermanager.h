@@ -4,6 +4,7 @@
 #include <QMap>
 #include <QString>
 #include <mutex>
+#include <functional>
 #include "muxer/muxer.h"
 
 
@@ -36,6 +37,8 @@ public:
 
     // 检查是否有任何 Muxer 正在工作
     bool isActive() const;
+
+    void onRequestKeyframe(std::function<void()> callback);
 
 private:
     struct MuxerTarget {

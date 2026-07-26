@@ -2,6 +2,7 @@
 #include "ui_statisticsdialog.h"
 #include <QTableWidgetItem>
 #include "encoder/vencoder.h"
+#include "render/cudarenderwidget.h"
 #include "statusbar/fpscounter.h"
 StatisticsDialog* StatisticsDialog::s_instance = nullptr;
 
@@ -59,21 +60,20 @@ void StatisticsDialog::setSystemMonitors(SystemMonitor* systemMonitor) {
     systemMonitor_ = systemMonitor;
 }
 
-void StatisticsDialog::setNetWorkMonitors(NetworkMonitor* networkMonitor) {
-    if(!networkMonitor) return;
-    networkMonitor_ = networkMonitor;
-
-    // 连接NetworkMonitor的实时结果信号，更新推流数据
-    if (networkMonitor_) {
-        connect(networkMonitor_, &NetworkMonitor::monitorRealTimeResult,this, &StatisticsDialog::onStreamStatusUpdated);
-        connect(networkMonitor_, &NetworkMonitor::monitorFinalResult,this, &StatisticsDialog::onStreamStatusUpdated);
-    }
+void StatisticsDialog::setNetWorkMonitors(NetMonitor* netMonitor) {
+    if (!netMonitor || netMonitor_ == netMonitor) return;
+    netMonitor_ = netMonitor;
+    connect(netMonitor_, &NetMonitor::statsUpdated,
+            this, &StatisticsDialog::onStreamStatusUpdated,
+            Qt::UniqueConnection);
 }
 
-void StatisticsDialog::setEncodeConfig(VEncoder *vEncoder,FPSCounter* fpsCounter)
+void StatisticsDialog::setEncodeConfig(VEncoder *vEncoder, FPSCounter* fpsCounter,
+                                       CudaRenderWidget* renderWidget)
 {
     if(!vEncoder || !fpsCounter) return;
     vEncoder_ = vEncoder;
+    renderWidget_ = renderWidget;
     connect(fpsCounter,&FPSCounter::fpsInfoUpdated,this,&StatisticsDialog::onUpdateFps);
 }
 void StatisticsDialog::onRefreshTimerTimeout() {
@@ -91,8 +91,10 @@ void StatisticsDialog::onRefreshTimerTimeout() {
         globalConfig_.processMemory = metrics.process_memory / (1024.0 * 1024.0);
         globalConfig_.memoryUsage = metrics.memory_usage;
         // 渲染延迟的帧
-        globalConfig_.delayRenderedFrames = 0;
-        globalConfig_.totalRenderedFrames = 0;
+        globalConfig_.delayRenderedFrames = renderWidget_
+            ? renderWidget_->getDelayedRenderFrameCount() : 0;
+        globalConfig_.totalRenderedFrames = renderWidget_
+            ? renderWidget_->getRenderedFrameCount() : 0;
         // 编码延迟的帧
         if(vEncoder_){
             globalConfig_.expectFps = vEncoder_->getConfig().framerate;
@@ -109,31 +111,18 @@ void StatisticsDialog::onRefreshTimerTimeout() {
 
 }
 
-void StatisticsDialog::onStreamStatusUpdated(const NetworkMonitorResult& result) {
-    if (result.type != MonitorType::ZLMEDIAKIT) return;
-
-    // 解析ZLMEDIAKIT的监测结果，填充推流SceneConfig
-    SceneConfig config;
-    if(result.isSuccess){
-        config.type = StatisticType::Stream;
-        config.isActive = result.isSuccess; // 推流是否成功（在线）
-        config.lossFrame = result.lossFrame;
-        config.totalFrames = result.totalFrames;
-        config.lossRate = result.lossRate;
-        // 总输出数据量：totalBytes 转换为 MiB（1 MiB = 1024*1024 字节）
-        config.storageSize = result.totalDataBytes;
-        config.bitRate = result.streamBitrateKbps; // 实时码率（kb/s）
-    }else
-    {
-        config.type = StatisticType::Stream;
-        config.isActive = result.isSuccess; // 推流是否成功（在线）
-        config.lossFrame = 0;
-        config.totalFrames = 0;
-        config.lossRate = 0.0;
-        config.storageSize = 0;
-        config.bitRate = 0;
-    }
-
+void StatisticsDialog::onStreamStatusUpdated(const NetworkStats& stats) {
+    SceneConfig config{};
+    config.type = StatisticType::Stream;
+    config.isActive = stats.isStreaming();
+    config.lossFrame = stats.droppedVideoFrames;
+    config.totalFrames = (vEncoder_ ? vEncoder_->getEncodedFrameCount() : 0) +
+                         stats.droppedVideoFrames;
+    config.lossRate = config.totalFrames > 0
+                          ? 100.0f * config.lossFrame / config.totalFrames
+                          : 0.0f;
+    config.storageSize = stats.bytesSent;
+    config.bitRate = stats.sendThroughputBps / 1000;
     updateSceneConfig(StatisticType::Stream, config);
 }
 
@@ -201,6 +190,7 @@ std::string StatisticsDialog::formatBytes(uint64_t bytes) {
 void StatisticsDialog::clear()
 {
     systemMonitor_ = nullptr;
-    networkMonitor_ = nullptr;
+    netMonitor_ = nullptr;
+    renderWidget_ = nullptr;
     vEncoder_ = nullptr;
 }

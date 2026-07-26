@@ -38,10 +38,25 @@ SOURCES += \
     mixer/audiomixprocessor.cpp \
     monitor/audiomonitor.cpp \
     monitor/netmonitor.cpp \
-    monitor/networkmonitor.cpp \
     monitor/systemmonitor.cpp \
     muxer/muxer.cpp \
     muxer/muxermanager.cpp \
+    librtmp_push/adapter_ffmpeg/ffmpeg_bridge.cpp \
+    librtmp_push/src/util/logger.cpp \
+    librtmp_push/src/protocol/amf0.cpp \
+    librtmp_push/src/protocol/chunk_writer.cpp \
+    librtmp_push/src/protocol/chunk_reader.cpp \
+    librtmp_push/src/protocol/handshake.cpp \
+    librtmp_push/src/protocol/flv_tag.cpp \
+    librtmp_push/src/transport/tcp_transport_select.cpp \
+    librtmp_push/src/core/types.cpp \
+    librtmp_push/src/core/rtmp_url.cpp \
+    librtmp_push/src/core/bounded_queue.cpp \
+    librtmp_push/src/core/metrics.cpp \
+    librtmp_push/src/core/session.cpp \
+    librtmp_push/src/core/publisher_impl.cpp \
+    librtmp_push/src/core/publisher.cpp \
+    librtmp_push/src/core/capi.cpp \
     pool/framepool.cpp \
     pool/packetpool.cpp \
     queue/cudaframequeue.cpp \
@@ -116,7 +131,6 @@ HEADERS += \
     mixer/audiomixprocessor.h \
     monitor/audiomonitor.h \
     monitor/netmonitor.h \
-    monitor/networkmonitor.h \
     monitor/systemmonitor.h \
     muxer/muxer.h \
     muxer/muxermanager.h \
@@ -194,8 +208,11 @@ FORMS += \
 
 
 INCLUDEPATH += $$PWD/include \
+               $$PWD/librtmp_push/include \
+               $$PWD/librtmp_push \
+               $$PWD/librtmp_push/src
 
-LIBS        += -L$$PWD/lib -lavcodec -lavdevice -lavfilter -lavformat -lavutil -lpostproc -lswresample -lswscale -lvld \
+LIBS        += -L$$PWD/lib -lavcodec -lavdevice -lavfilter -lavformat -lavutil -lpostproc -lswresample -lswscale -lvld -lws2_32 \
 
 # WinRT核心库（WGC依赖）
 LIBS += -lwindowsapp

@@ -1,5 +1,4 @@
 #include "mystatusbar.h"
-#include "monitor/networkmonitor.h"
 #include <QStyle>
 #include <QPalette>
 #include <QFont>
@@ -32,7 +31,7 @@ MyStatusBar::MyStatusBar(QWidget *parent)
             this, &MyStatusBar::onShowNetWorkLabel);
     connect(&statusManager, &StatusBarManager::hideNetWorkLabel,
             this, &MyStatusBar::onHideNetWorkLabel);
-    connect(&statusManager, &StatusBarManager::steamInfoUpdated,
+    connect(&statusManager, &StatusBarManager::streamNetworkInfoUpdated,
             this, &MyStatusBar::onStreamPushingInfoUpdated);
     connect(&statusManager, &StatusBarManager::networkStatusUpdated,
             this, &MyStatusBar::onNetworkStatusUpdated);
@@ -189,19 +188,10 @@ void MyStatusBar::onHideNetWorkLabel()
     m_bitrateLabel->setVisible(false);
 }
 
-void MyStatusBar::onStreamPushingInfoUpdated(const NetworkMonitorResult &result)
+void MyStatusBar::onStreamPushingInfoUpdated(const NetworkStats& stats)
 {
-    if(result.isSuccess){
-        double lossRatio = result.totalFrames > 0
-                               ? 100.0 * result.lossFrame / result.totalFrames
-                               : 0.0;
-        m_lossFrameLabel->setText(QString("丢帧率: %1(%2%)").arg(result.lossFrame).arg(lossRatio, 0, 'f', 1));
-        m_bitrateLabel->setText(QString("%1kbs").arg(result.streamBitrateKbps));
-    }else{
-        m_lossFrameLabel->setText(QString("丢帧率: %1(%2%)").arg(0).arg(0.0,0,'f',1));
-        m_bitrateLabel->setText(QString("%1kbs").arg(0));
-    }
-
+    m_lossFrameLabel->setText(QString("丢帧: %1").arg(stats.droppedVideoFrames));
+    m_bitrateLabel->setText(QString("%1 kb/s").arg(stats.sendThroughputBps / 1000));
 }
 
 void MyStatusBar::onNetworkStatusUpdated(NetworkStatus status)

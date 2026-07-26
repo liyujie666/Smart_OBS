@@ -35,9 +35,6 @@ bool MuxerManager::addOutput(MuxerType type, const QString& url,const QString& f
             delete muxer;
             return false;
         }
-        if(type == MuxerType::Push){
-            muxer->startNetworkMonitor();
-        }
         muxers_.append({type, url, muxer});
     }
 
@@ -53,7 +50,6 @@ void MuxerManager::removeOutput(MuxerType type)
         if (muxers_[i].type == type) {
             // 释放资源
             muxers_[i].muxer->writeTrailer();
-            muxers_[i].muxer->stopNetworkMonitor();
             delete muxers_[i].muxer;
             // 从向量中删除
             muxers_.remove(i);
@@ -108,3 +104,15 @@ bool MuxerManager::isActive() const
     std::lock_guard<std::mutex> lock(mutex_);
     return !muxers_.isEmpty();
 }
+
+void MuxerManager::onRequestKeyframe(std::function<void()> callback)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& target : muxers_) {
+        if (target.type == MuxerType::Push) {
+            target.muxer->onRequestKeyframe(callback);
+        }
+    }
+}
+
+

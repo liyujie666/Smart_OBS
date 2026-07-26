@@ -15,6 +15,9 @@
 #include <QWindow>
 #include <QTimer>
 #include <QOffscreenSurface>
+#include <QElapsedTimer>
+#include <deque>
+#include <mutex>
 
 class SceneManager;
 class Scene;
@@ -53,6 +56,9 @@ public:
     void renderSceneLayersOffscreen(Scene *scene, const QSize &fboSize);
 
     int64_t getLastRenderedFrameIndex() const;
+    uint64_t getRenderedFrameCount() const { return renderedFrameCount_.load(); }
+    uint64_t getDelayedRenderFrameCount() const { return delayedRenderFrameCount_.load(); }
+    double getRecentAverageRenderDelay() const;
 
     QOpenGLShaderProgram& getMainShader() { return shader_; }
     QOpenGLShaderProgram& getOffscreenShader() { return offscreenShader_; }
@@ -82,6 +88,8 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent* event) override;
 
 private:
+
+    void recordRenderDelay(double elapsedMs);
 
     bool event(QEvent* e) override {
         if (e->type() == RenderTimer::RenderTriggerEvent) {
@@ -147,6 +155,12 @@ private:
     AVSyncClock* syncClock_ = nullptr;
     std::atomic<int64_t> lastCompositePts{0}; // 原子变量，确保线程间可见性
     std::atomic<bool> isFirstFrame{true};
+
+    std::atomic<uint64_t> renderedFrameCount_{0};
+    std::atomic<uint64_t> delayedRenderFrameCount_{0};
+    mutable std::mutex renderStatsMutex_;
+    std::deque<double> recentRenderDelaysMs_;
+    static constexpr size_t RenderDelayWindow = 30;
 };
 
 
