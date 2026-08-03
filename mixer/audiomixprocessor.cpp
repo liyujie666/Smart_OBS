@@ -2,6 +2,7 @@
 #include "pool/gloabalpool.h"
 #include "sync/offsetmanager.h"
 #include "sync/globalclock.h"
+#include "ScopedTimer.h"
 #include "QTimer"
 AudioMixProcessor::AudioMixProcessor(AVSyncClock* syncClock,QObject *parent) : QObject(parent),syncClock_(syncClock) {
     mixer_ = std::make_unique<AudioMixer>();
@@ -40,6 +41,7 @@ bool AudioMixProcessor::init(QVector<std::shared_ptr<FrameQueue>> frameQueues)
 }
 
 AVFrame* AudioMixProcessor::getMixedFrame() {
+    BENCHMARK_COND_SCOPE("amix_get_mixed_frame");
     if (!mixer_ || frameQueues_.isEmpty()) {
         qDebug() << "AudioMixProcessor not initialized";
         return nullptr;

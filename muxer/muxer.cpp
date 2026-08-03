@@ -3,6 +3,7 @@
 #include "adapter_ffmpeg/ffmpeg_bridge.h"
 #include "monitor/netmonitor.h"
 #include "statusbar/statusbarmanager.h"
+#include "ScopedTimer.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -176,6 +177,7 @@ bool Muxer::writePacket(AVPacket* pkt, AVMediaType type)
 
 bool Muxer::pushPacket(AVPacket* pkt, AVMediaType type)
 {
+    BENCHMARK_COND_SCOPE("rtmp_push_packet");
     if (!publisher_) return false;
 
     AVPacket packet = *pkt;

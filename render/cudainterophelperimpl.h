@@ -8,6 +8,7 @@
 
 #include <windows.h>
 #include <QOpenGLFunctions>
+#include "ScopedTimer.h"
 #ifndef CUDAINTEROPHELPERIMPL_H
 #define CUDAINTEROPHELPERIMPL_H
 #include <QDebug>
@@ -136,16 +137,20 @@ public:
             }
         }
 
-        launchNV12ToRGBA(
-            (uint8_t*)yPlane,
-            (uint8_t*)uvPlane,
-            rgbaBuffer,
-            width,
-            height,
-            pitchY,
-            pitchUV,
-            pitchRGBA,
-            0);
+        {
+            BENCHMARK_COND_SCOPE("cuda_nv12_to_rgba");
+            launchNV12ToRGBA(
+                (uint8_t*)yPlane,
+                (uint8_t*)uvPlane,
+                rgbaBuffer,
+                width,
+                height,
+                pitchY,
+                pitchUV,
+                pitchRGBA,
+                0);
+            cudaStreamSynchronize(0);
+        }
         err = cudaMemcpy2DToArray(texArray, 0, 0, rgbaBuffer, pitchRGBA, width * 4, height, cudaMemcpyDeviceToDevice);
         if (err != cudaSuccess) {
             qWarning() << "cudaMemcpy2DToArray failed:" << cudaGetErrorString(err);

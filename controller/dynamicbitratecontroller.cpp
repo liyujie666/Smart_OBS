@@ -2,6 +2,7 @@
 
 #include "encoder/vencoder.h"
 #include "queue/packetqueue.h"
+#include "ScopedTimer.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -178,6 +179,7 @@ bool DynamicBitrateController::applyVideoBitrate(int targetBitrate)
 
 void DynamicBitrateController::onMonitorTimerTimeout()
 {
+    BENCHMARK_COND_SCOPE("abr_decision");
     NetworkStats stats;
     int oldBitrate = 0;
     int targetBitrate = 0;

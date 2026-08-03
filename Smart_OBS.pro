@@ -100,7 +100,8 @@ SOURCES += \
     transition/directtransition.cpp \
     transition/fadetransition.cpp \
     transition/slidetransition.cpp \
-    transition/transitionmanager.cpp
+    transition/transitionmanager.cpp \
+    benchmark/BenchmarkCollector.cpp
 
 
 HEADERS += \
@@ -190,7 +191,9 @@ HEADERS += \
     transition/fadetransition.h \
     transition/slidetransition.h \
     transition/transitionbase.h \
-    transition/transitionmanager.h
+    transition/transitionmanager.h \
+    benchmark/BenchmarkCollector.h \
+    benchmark/ScopedTimer.h
 
 
 
@@ -210,7 +213,8 @@ FORMS += \
 INCLUDEPATH += $$PWD/include \
                $$PWD/librtmp_push/include \
                $$PWD/librtmp_push \
-               $$PWD/librtmp_push/src
+               $$PWD/librtmp_push/src \
+               $$PWD/benchmark
 
 LIBS        += -L$$PWD/lib -lavcodec -lavdevice -lavfilter -lavformat -lavutil -lpostproc -lswresample -lswscale -lvld -lws2_32 \
 

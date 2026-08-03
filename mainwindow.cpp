@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "scene/scenemanager.h"
+#include "BenchmarkCollector.h"
 #include "component/camerasettingdialog.h"
 #include "component/filesettingdialog.h"
 #include "component/screensettingdialog.h"
@@ -29,6 +30,7 @@
 #include <QStandardPaths>
 #include <QComboBox>
 #include <QTimer>
+#include <QShortcut>
 #include <QRegularExpression>
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -63,6 +65,22 @@ MainWindow::MainWindow(QWidget *parent)
     // poolTimer->setInterval(2000);
     // connect(poolTimer,&QTimer::timeout,this,&MainWindow::printPoolStats);
     // poolTimer->start();
+
+    // F12 启动/停止 Benchmark
+    QShortcut* benchShortcut = new QShortcut(QKeySequence(Qt::Key_F12), this);
+    connect(benchShortcut, &QShortcut::activated, this, [this]() {
+        auto& bench = BenchmarkCollector::instance();
+        if (bench.isRunning()) {
+            bench.stop();
+            QString path = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)
+                           + "/benchmark_result.json";
+            bench.exportReport(path);
+            qInfo() << "[Benchmark] Report saved to:" << path;
+        } else {
+            bench.start(60, 1000);
+            qInfo() << "[Benchmark] Started (60s). Press F12 again to stop early.";
+        }
+    });
 
 }
 
@@ -454,6 +472,9 @@ void MainWindow::initSysMonitor()
     });
 
     StatisticsDialog::getInstance()->setSystemMonitors(m_sysMonitor);
+
+    // Benchmark:绑定系统监控
+    BenchmarkCollector::instance().bindSystemMonitor(m_sysMonitor);
 }
 
 void MainWindow::initTransitionUI()

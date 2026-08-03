@@ -5,6 +5,7 @@
 #include "scene/scene.h"
 #include "sync/globalclock.h"
 #include "transition/transitionmanager.h"
+#include "ScopedTimer.h"
 #include <QOpenGLContext>
 #include <QDebug>
 #include <QElapsedTimer>
@@ -314,6 +315,7 @@ QOpenGLContext* CudaRenderWidget::getMainGLContext() {
 
 void CudaRenderWidget::offscreenRender()
 {
+    BENCHMARK_COND_SCOPE("fbo_offscreen_render");
     QElapsedTimer renderTimer;
     renderTimer.start();
     // 仅在录屏时执行

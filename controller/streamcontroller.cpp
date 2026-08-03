@@ -1,6 +1,7 @@
 #include "streamcontroller.h"
 #include "sync/globalclock.h"
 #include "component/statisticsdialog.h"
+#include "BenchmarkCollector.h"
 #include <QOffscreenSurface>
 #include <QDateTime>
 // StreamController::StreamController()
@@ -34,6 +35,16 @@ StreamController::StreamController(ThreadPool* threadPools,CudaRenderWidget* ope
                 qDebug() << "[UI通知] 码率" << stateStr << "："
                          << oldBitrate/1000 << "Kbps → " << newBitrate/1000 << "Kbps";
             });
+
+    // Benchmark:绑定各模块数据源
+    auto& bench = BenchmarkCollector::instance();
+    bench.bindEncoder(vEncoder_.get());
+    bench.bindRenderer(openglWidget_);
+    bench.bindFpsCounter(fpsCounter_.get());
+    bench.bindNetMonitor(netMonitor_);
+    bench.bindAbrController(dynamicBitrateCtrl_.get());
+    bench.bindVideoPacketQueue(vPktQueue_.get());
+    bench.bindAudioPacketQueue(aPktQueue_.get());
 
 }
 

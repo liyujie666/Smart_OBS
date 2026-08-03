@@ -1,5 +1,6 @@
 #include "vencoder.h"
 #include "pool/gloabalpool.h"
+#include "ScopedTimer.h"
 #include <QDebug>
 #include <algorithm>
 
@@ -148,6 +149,7 @@ bool VEncoder::init(const videoEncodeConfig &config)
 #include <QElapsedTimer>
 bool VEncoder::encode(cudaArray_t cuda_array)
 {
+    BENCHMARK_COND_SCOPE("encode_total");
 
     QElapsedTimer frameTimer;
     frameTimer.start();
@@ -219,14 +221,18 @@ bool VEncoder::encode(cudaArray_t cuda_array)
     }
 
     // 调用RGBA→NV12时，传递pitchRGBA
-    launchRGBAToNV12(
-        reinterpret_cast<CUdeviceptr>(d_rgba_temp),
-        d_y_plane_,
-        d_uv_plane_,
-        srcWidth,
-        srcHeight,
-        pitchRGBA
-        );
+    {
+        BENCHMARK_COND_SCOPE("cuda_rgba_to_nv12");
+        launchRGBAToNV12(
+            reinterpret_cast<CUdeviceptr>(d_rgba_temp),
+            d_y_plane_,
+            d_uv_plane_,
+            srcWidth,
+            srcHeight,
+            pitchRGBA
+            );
+        cudaStreamSynchronize(0);
+    }
 
     // 检查转换错误
     cuda_err = cudaGetLastError();
