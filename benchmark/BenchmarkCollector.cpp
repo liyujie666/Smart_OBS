@@ -203,12 +203,6 @@ BenchmarkSnapshot BenchmarkCollector::collectSnapshot() const
         snap.audioQueueDelayMs = stats.audioQueueDelayMs;
         snap.socketWriteBlockMs = stats.socketWriteBlockMs;
         snap.droppedVideoFrames = stats.droppedVideoFrames;
-
-        // 推流状态码
-        snap.sessionState = stats.sessionState;
-        snap.stateDetail = stats.stateDetail;
-        snap.reconnectCount = stats.reconnectCount;
-        snap.networkLevel = stats.networkLevel;
     }
 
     // ABR
@@ -322,12 +316,6 @@ QJsonObject BenchmarkCollector::snapshotToJson(const BenchmarkSnapshot& snap) co
     obj["audio_queue_delay_ms"] = snap.audioQueueDelayMs;
     obj["socket_write_block_ms"] = snap.socketWriteBlockMs;
     obj["dropped_video_frames"] = snap.droppedVideoFrames;
-
-    // 推流状态码
-    obj["session_state"] = QString::fromUtf8(rtmp::toString(snap.sessionState));
-    obj["state_detail"] = snap.stateDetail;
-    obj["reconnect_count"] = snap.reconnectCount;
-    obj["network_level"] = snap.networkLevel;
 
     // ABR
     obj["current_bitrate_kbps"] = snap.currentBitrate / 1000;

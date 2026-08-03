@@ -17,8 +17,6 @@
 #include <functional>
 #include <chrono>
 
-#include "rtmp/types.h"
-
 /**
  * @brief 单个指标的统计摘要
  */
@@ -70,12 +68,6 @@ struct BenchmarkSnapshot {
     int audioQueueDelayMs = 0;
     int socketWriteBlockMs = 0;
     int droppedVideoFrames = 0;
-
-    // 推流状态码
-    rtmp::SessionState sessionState = rtmp::SessionState::Idle;
-    QString stateDetail;
-    int reconnectCount = 0;
-    int networkLevel = 3;
 
     // ABR
     int currentBitrate = 0;
