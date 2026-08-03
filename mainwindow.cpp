@@ -67,19 +67,24 @@ MainWindow::MainWindow(QWidget *parent)
     // poolTimer->start();
 
     // F12 启动/停止 Benchmark
+    auto& bench = BenchmarkCollector::instance();
     QShortcut* benchShortcut = new QShortcut(QKeySequence(Qt::Key_F12), this);
     connect(benchShortcut, &QShortcut::activated, this, [this]() {
-        auto& bench = BenchmarkCollector::instance();
-        if (bench.isRunning()) {
-            bench.stop();
-            QString path = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)
-                           + "/benchmark_result.json";
-            bench.exportReport(path);
-            qInfo() << "[Benchmark] Report saved to:" << path;
+        auto& b = BenchmarkCollector::instance();
+        if (b.isRunning()) {
+            b.stop();
         } else {
-            bench.start(60, 1000);
+            b.start(60, 1000);
             qInfo() << "[Benchmark] Started (60s). Press F12 again to stop early.";
         }
+    });
+
+    // benchmark 自动停止或手动停止后统一导出报告
+    connect(&bench, &BenchmarkCollector::benchmarkFinished, this, [this]() {
+        QString path = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)
+                       + "/benchmark_result.json";
+        BenchmarkCollector::instance().exportReport(path);
+        qInfo() << "[Benchmark] Auto-stopped. Report saved to:" << path;
     });
 
 }
