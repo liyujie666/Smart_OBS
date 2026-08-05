@@ -67,15 +67,22 @@ MainWindow::MainWindow(QWidget *parent)
     // poolTimer->start();
 
     // F12 启动/停止 Benchmark
+    // 使用 ApplicationShortcut 上下文: CudaRenderWidget(QOpenGLWidget) 在 Windows 上
+    // 会创建原生子窗口, 点击渲染区后焦点转移到原生窗口, 会拦截键盘事件导致
+    // 默认的 WindowShortcut 匹配失败. 改为应用级上下文确保 F12 在任意焦点下均生效.
     auto& bench = BenchmarkCollector::instance();
     QShortcut* benchShortcut = new QShortcut(QKeySequence(Qt::Key_F12), this);
+    benchShortcut->setContext(Qt::ApplicationShortcut);
     connect(benchShortcut, &QShortcut::activated, this, [this]() {
         auto& b = BenchmarkCollector::instance();
         if (b.isRunning()) {
             b.stop();
+            StatusBarManager::getInstance().showMessage(
+                tr("[Benchmark] 已停止, 正在导出报告..."), MessageType::Info, 3000);
         } else {
             b.start(60, 1000);
-            qInfo() << "[Benchmark] Started (60s). Press F12 again to stop early.";
+            StatusBarManager::getInstance().showMessage(
+                tr("[Benchmark] 已启动 (60s), 再次按 F12 提前停止"), MessageType::Success, 3000);
         }
     });
 
@@ -83,8 +90,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(&bench, &BenchmarkCollector::benchmarkFinished, this, [this]() {
         QString path = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)
                        + "/benchmark_result.json";
-        BenchmarkCollector::instance().exportReport(path);
-        qInfo() << "[Benchmark] Auto-stopped. Report saved to:" << path;
+        bool ok = BenchmarkCollector::instance().exportReport(path);
+        if (ok) {
+            qInfo() << "[Benchmark] Report saved to:" << path;
+        } else {
+            qWarning() << "[Benchmark] Failed to save report to:" << path;
+        }
     });
 
 }

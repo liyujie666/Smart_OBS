@@ -1,6 +1,7 @@
 #ifndef BENCHMARKCOLLECTOR_H
 #define BENCHMARKCOLLECTOR_H
 
+#define NOMINMAX
 #include <QObject>
 #include <QTimer>
 #include <QElapsedTimer>
